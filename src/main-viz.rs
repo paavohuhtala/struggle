@@ -42,14 +42,14 @@ async fn main() {
     let center_x = WIDTH as f32 / 2.0;
     let center_y = HEIGHT as f32 / 2.0;
 
-    let player_a = (Player::Red, one_at_a_time_expectimax(2));
-    let player_b = (Player::Yellow, random_expectimax());
+    let mut player_a = (Player::Red, one_at_a_time_expectimax(2));
+    let mut player_b = (Player::Yellow, random_expectimax());
 
     let player_a_color = player_a.0;
     let player_b_color = player_b.0;
 
-    let mut current_player = player_a;
-    let mut other_player = player_b;
+    let mut current_player = player_a.0;
+    let mut other_player = player_b.0;
 
     let mut rng = SmallRng::from_rng(::rand::thread_rng()).unwrap();
 
@@ -69,21 +69,24 @@ async fn main() {
         if time > next_tick && !winnage {
             let dice = rng.gen_range(1..=6);
             last_die = dice;
-            last_die_player = current_player.0;
+            last_die_player = current_player;
 
-            let moves = board.get_moves(dice, current_player.0, other_player.0);
+            let moves = board.get_moves(dice, current_player, other_player);
 
             let ctx = GameContext {
-                current_player: current_player.0,
-                other_player: other_player.0,
+                current_player,
+                other_player,
                 dice,
             };
 
-            let mov = current_player
-                .1
-                .select_move(&ctx, &board, &moves, &mut rng)
-                .clone();
-            board.perform_move(current_player.0, &mov);
+            let mov = if current_player == player_a_color {
+                player_a.1.select_move(&ctx, &board, &moves, &mut rng)
+            } else {
+                player_b.1.select_move(&ctx, &board, &moves, &mut rng)
+            }
+            .clone();
+
+            board.perform_move(current_player, &mov);
 
             if let Some(_) = board.get_winner() {
                 winnage = true;
@@ -110,7 +113,7 @@ async fn main() {
 
         clear_background(BLACK);
 
-        draw_circle(center_x, center_y, OUTER_RADIUS, GRAY);
+        draw_poly(center_x, center_y, 64, OUTER_RADIUS, 0.0, GRAY);
 
         draw_text(
             &last_die.to_string(),
@@ -173,7 +176,7 @@ async fn main() {
                         4 => "4",
                         _ => unreachable!(),
                     };
-                    draw_text(text, x, y, 30.0, WHITE);
+                    draw_text(text, x, y, 30.0, BLACK);
                 }
 
                 let home_base = &board.home_bases[side];

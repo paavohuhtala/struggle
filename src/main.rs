@@ -2,7 +2,7 @@ use ::rand::prelude::*;
 use itertools::Itertools;
 use rayon::prelude::*;
 use struggle_core::{
-    players::{worst_expectimax, GameContext, StrugglePlayer},
+    players::{expectimax, GameContext, StrugglePlayer},
     struggle::{Board, Player},
 };
 
@@ -21,20 +21,24 @@ struct GameResult {
     pub stats: Option<Box<GameStats>>,
 }
 
-fn play_game<'a>(
-    player_a: (Player, &'a mut dyn StrugglePlayer),
-    player_b: (Player, &'a mut dyn StrugglePlayer),
+fn play_game<'a, A, B>(
+    player_a: (Player, &'a mut A),
+    player_b: (Player, &'a mut B),
     collect_stats: bool,
-) -> GameResult {
+) -> GameResult
+where
+    A: StrugglePlayer,
+    B: StrugglePlayer,
+{
     let mut rng = SmallRng::from_rng(rand::thread_rng()).unwrap();
 
     let player_a_color = player_a.0;
 
     // randomize first player
     let (mut current_player, mut other_player) = if rng.gen::<bool>() {
-        (player_b, player_a)
+        (player_b.0, player_a.0)
     } else {
-        (player_a, player_b)
+        (player_a.0, player_b.0)
     };
 
     let mut board = Board::new();
@@ -45,15 +49,15 @@ fn play_game<'a>(
         let dice = rng.gen_range(1..=6);
 
         let ctx = GameContext {
-            current_player: current_player.0,
-            other_player: other_player.0,
+            current_player,
+            other_player,
             dice,
         };
 
-        let moves = board.get_moves(dice, current_player.0, other_player.0);
+        let moves = board.get_moves(dice, current_player, other_player);
 
         if let Some(stats) = stats.as_mut() {
-            let index = if current_player.0 == player_a_color {
+            let index = if current_player == player_a_color {
                 0
             } else {
                 1
@@ -63,11 +67,14 @@ fn play_game<'a>(
             stats.move_distribution[index][moves.len() as usize - 1] += 1;
         }
 
-        let mov = current_player
-            .1
-            .select_move(&ctx, &board, &moves, &mut rng)
-            .clone();
-        board.perform_move(current_player.0, &mov);
+        let mov = if current_player == player_a_color {
+            player_a.1.select_move(&ctx, &board, &moves, &mut rng)
+        } else {
+            player_b.1.select_move(&ctx, &board, &moves, &mut rng)
+        }
+        .clone();
+
+        board.perform_move(current_player, &mov);
 
         if let Some(winner) = board.get_winner() {
             return GameResult {
@@ -97,7 +104,7 @@ fn print_move_distribution_graph(distribution: [u32; 4]) {
 }
 
 pub fn main() {
-    let a_color = Player::Red;
+    let a_color = Player::Blue;
     let b_color = Player::Yellow;
 
     let total_games = 100_000u32;
@@ -107,8 +114,8 @@ pub fn main() {
     let results = (0..total_games)
         .into_par_iter()
         .map(|_| {
-            let mut player_a = worst_expectimax(2);
-            let mut player_b = worst_expectimax(2);
+            let mut player_a = expectimax(2);
+            let mut player_b = expectimax(2);
             play_game(
                 (a_color, &mut player_a),
                 (b_color, &mut player_b),
@@ -126,11 +133,16 @@ pub fn main() {
     });
 
     let total_games = results.len();
+    let total_b_wins = total_games - total_a_wins;
 
     let a_b_win_ratio = total_a_wins as f64 / total_games as f64;
     let difference_percentage = (a_b_win_ratio - 0.5).abs() * 100.0;
     let diff_word = if a_b_win_ratio > 0.5 { "more" } else { "less" };
 
+    println!(
+        "{} games, player A won {}, player B won {}",
+        total_games, total_a_wins, total_b_wins
+    );
     println!(
         "p(a_wins) = {:.2} ({:.1}% {})",
         a_b_win_ratio, difference_percentage, diff_word
