@@ -1,0 +1,29 @@
+[package]
+name = "struggle"
+version = "0.1.0"
+edition = "2021"
+default-run = "struggle-sim"
+
+[lib]
+name = "struggle_core"
+path = "src/lib.rs"
+
+[[bin]]
+name = "struggle-sim"
+path = "src/main.rs"
+
+[[bin]]
+name = "struggle-viz"
+path = "src/main-viz.rs"
+
+[dependencies]
+macroquad = "0.3.13"
+rand = { version = "*", features = ["small_rng"] }
+rayon = "1.5.1"
+itertools = "0.10.3"
+smallvec = "1.7.0"
+mimalloc = { version = "*", default-features = false }
+
+[profile.release]
+debug = 1
+lto = true
