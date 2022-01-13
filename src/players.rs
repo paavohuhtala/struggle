@@ -1,10 +1,14 @@
+use std::borrow::Cow;
+
 use ::rand::{prelude::*, rngs::SmallRng};
 use itertools::Itertools;
 use smallvec::SmallVec;
 
 use crate::struggle::{Board, PiecePosition, Player, ValidMove};
 
-pub trait StrugglePlayer {
+pub trait StrugglePlayer: Clone {
+    fn name(&self) -> Cow<'static, str>;
+
     fn select_move<'a>(
         &mut self,
         ctx: &'a GameContext,
@@ -20,7 +24,8 @@ pub struct GameContext {
     pub dice: u8,
 }
 
-// Randomly selected any legal move
+// Randomly selects any legal move
+#[derive(Clone)]
 pub struct RandomPlayer;
 
 impl StrugglePlayer for RandomPlayer {
@@ -33,9 +38,14 @@ impl StrugglePlayer for RandomPlayer {
     ) -> &'a ValidMove {
         moves.choose(rng).unwrap()
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("Random")
+    }
 }
 
 // Eat whenever possible, otherwise select move randomly
+#[derive(Clone)]
 pub struct RandomEaterPlayer;
 
 impl StrugglePlayer for RandomEaterPlayer {
@@ -53,12 +63,17 @@ impl StrugglePlayer for RandomEaterPlayer {
             None => moves.choose(rng).unwrap(),
         }
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("RandomEater")
+    }
 }
 
 // Avoid eating at all costs
-pub struct DietPlayer;
+#[derive(Clone)]
+pub struct RandomDietPlayer;
 
-impl StrugglePlayer for DietPlayer {
+impl StrugglePlayer for RandomDietPlayer {
     fn select_move<'a>(
         &mut self,
         _ctx: &'a GameContext,
@@ -73,10 +88,15 @@ impl StrugglePlayer for DietPlayer {
             _ => diet_compatible.choose(rng).unwrap(),
         }
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("RandomDiet")
+    }
 }
 
 // Prioritise moving pieces over introducing new ones.
 // It doesn't matter who moves, as long as someone moves.
+#[derive(Clone)]
 pub struct MoveItPlayer;
 
 impl StrugglePlayer for MoveItPlayer {
@@ -100,9 +120,14 @@ impl StrugglePlayer for MoveItPlayer {
             _ => moving_moves.choose(rng).unwrap(),
         }
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("MoveIt")
+    }
 }
 
 // Focus on getting everyone on the board, then play randomly
+#[derive(Clone)]
 pub struct ParticipationAwardPlayer;
 
 impl StrugglePlayer for ParticipationAwardPlayer {
@@ -126,23 +151,31 @@ impl StrugglePlayer for ParticipationAwardPlayer {
             _ => participatory_moves.choose(rng).unwrap(),
         }
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("ParticipationAward")
+    }
 }
 
 pub type HeuristicFunction = fn(board: &Board, player: Player, enemy: Player) -> f64;
 
+#[derive(Clone)]
 pub struct GameTreePlayer<F>
 where
     F: Fn(&Board, Player, Player) -> f64,
 {
     pub heuristic: F,
     pub max_depth: u8,
+
+    name: &'static str,
 }
 
 impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
-    pub fn new(f: F, max_depth: u8) -> Self {
+    pub fn new(f: F, max_depth: u8, name: &'static str) -> Self {
         GameTreePlayer {
             heuristic: f,
             max_depth,
+            name,
         }
     }
 
@@ -236,7 +269,7 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
     }
 }
 
-impl<F: Fn(&Board, Player, Player) -> f64> StrugglePlayer for GameTreePlayer<F> {
+impl<F: Fn(&Board, Player, Player) -> f64 + Clone> StrugglePlayer for GameTreePlayer<F> {
     fn select_move<'a>(
         &mut self,
         ctx: &'a GameContext,
@@ -275,9 +308,13 @@ impl<F: Fn(&Board, Player, Player) -> f64> StrugglePlayer for GameTreePlayer<F> 
             return best;
         }
     }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from(format!("{}({})", self.name, self.max_depth))
+    }
 }
 
-pub fn basic_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
+pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
     let mut score = 0.0;
 
     match board.get_winner() {
@@ -310,6 +347,19 @@ pub fn basic_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
                         score += 100.0;
                     }
                 }
+
+                for enemy_i in enemy_pieces
+                    .iter()
+                    .copied()
+                    .filter_map(PiecePosition::as_board_index)
+                {
+                    let distance_to_enemy = board.clockwise_distance(*i, enemy_i);
+
+                    // Small bonus for being within eating distance
+                    if distance_to_enemy >= 1 && distance_to_enemy <= 6 {
+                        score += 20.0;
+                    }
+                }
             }
             PiecePosition::Goal(_) => {
                 score += 10000.0;
@@ -325,6 +375,19 @@ pub fn basic_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
                 } else {
                     score -= 300.0;
                 }
+
+                for own_i in own_pieces
+                    .iter()
+                    .copied()
+                    .filter_map(PiecePosition::as_board_index)
+                {
+                    let distance_to_own = board.clockwise_distance(i, own_i);
+
+                    // Penalty for being within eating distance
+                    if distance_to_own >= 1 && distance_to_own <= 6 {
+                        score -= 20.0;
+                    }
+                }
             }
             PiecePosition::Goal(_) => {
                 score -= 15000.0;
@@ -337,22 +400,25 @@ pub fn basic_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
 
 pub fn expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
-        heuristic: basic_heuristic,
+        heuristic: default_heuristic,
         max_depth: depth,
+        name: "Expectimax",
     }
 }
 
 pub fn confused_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
-        heuristic: |b, p1, p2| basic_heuristic(b, p2, p1),
+        heuristic: |b, p1, p2| default_heuristic(b, p2, p1),
         max_depth: depth,
+        name: "ConfusedExpectimax",
     }
 }
 
 pub fn worst_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
-        heuristic: |b, p1, p2| -basic_heuristic(b, p1, p2),
+        heuristic: |b, p1, p2| -default_heuristic(b, p1, p2),
         max_depth: depth,
+        name: "WorstExpectimax",
     }
 }
 
@@ -360,6 +426,7 @@ pub fn random_expectimax() -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |_, _, _| rand::thread_rng().gen(),
         max_depth: 0,
+        name: "RandomExpectimax",
     }
 }
 
@@ -367,6 +434,7 @@ pub fn participatory_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| 4.0 - board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
+        name: "ParticipatoryExpectimax",
     }
 }
 
@@ -374,6 +442,7 @@ pub fn one_at_a_time_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
+        name: "OneAtATimeExpectimax",
     }
 }
 
@@ -388,6 +457,7 @@ pub fn maximize_options_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: count_moves_heuristic,
         max_depth: depth,
+        name: "MaximizeOptionsExpectimax",
     }
 }
 
@@ -395,9 +465,11 @@ pub fn minimize_options_expectimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, enemy| -count_moves_heuristic(board, enemy, player),
         max_depth: depth,
+        name: "MinimizeOptionsExpectimax",
     }
 }
 
+#[derive(Clone)]
 pub struct DilutedPlayer<P: StrugglePlayer>(pub P, pub f64);
 
 impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
@@ -413,5 +485,9 @@ impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
         } else {
             moves.choose(rng).unwrap()
         }
+    }
+
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from(format!("{} {:.0}%", self.0.name(), self.1 * 100.0))
     }
 }

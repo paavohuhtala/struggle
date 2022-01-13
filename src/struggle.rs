@@ -18,6 +18,15 @@ pub enum PiecePosition {
     Goal(u8),
 }
 
+impl PiecePosition {
+    pub fn as_board_index(self) -> Option<u8> {
+        match self {
+            PiecePosition::Board(index) => Some(index),
+            _ => None,
+        }
+    }
+}
+
 #[derive(Clone)]
 pub struct Board {
     pub tiles: [BoardCell; 7 * 4],

@@ -1,6 +1,6 @@
 use struggle_core::{
     players::{
-        basic_heuristic, one_at_a_time_expectimax, random_expectimax, GameContext, StrugglePlayer,
+        default_heuristic, one_at_a_time_expectimax, random_expectimax, GameContext, StrugglePlayer,
     },
     struggle::{Board, Player, COLORS},
 };
@@ -96,8 +96,8 @@ async fn main() {
                 std::mem::swap(&mut current_player, &mut other_player);
             }
 
-            red_score = basic_heuristic(&board, player_a_color, player_b_color);
-            yellow_score = basic_heuristic(&board, player_b_color, player_a_color);
+            red_score = default_heuristic(&board, player_a_color, player_b_color);
+            yellow_score = default_heuristic(&board, player_b_color, player_a_color);
 
             next_tick = time + 0.2;
         }
