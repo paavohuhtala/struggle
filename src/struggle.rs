@@ -1,4 +1,6 @@
-use smallvec::{self, SmallVec};
+use std::borrow::Cow;
+
+use arrayvec::ArrayVec;
 
 #[derive(Copy, Clone, Debug, PartialEq, Eq)]
 pub enum Player {
@@ -32,17 +34,23 @@ pub struct Board {
     pub tiles: [BoardCell; 7 * 4],
     pub goals: [Goal; 4],
     pub home_bases: [HomeBase; 4],
+
+    players: (Player, Player),
+    piece_cache: (PieceVec, PieceVec),
 }
 
-pub type MoveVec = SmallVec<[ValidMove; 4]>;
-pub type PieceVec = SmallVec<[PiecePosition; 4]>;
+pub type MoveVec = ArrayVec<ValidMove, 4>;
+pub type PieceVec = ArrayVec<PiecePosition, 4>;
 
 impl Board {
-    pub fn new() -> Self {
+    pub fn new(player_a: Player, player_b: Player) -> Self {
         Board {
             tiles: [None; 7 * 4],
-            goals: COLORS.map(|_| [None; 4]).try_into().unwrap(),
+            goals: COLORS.map(|_| [None; 4]),
             home_bases: COLORS.map(|_| HomeBase::new()),
+
+            players: (player_a, player_b),
+            piece_cache: (PieceVec::new(), PieceVec::new()),
         }
     }
 }
@@ -66,16 +74,24 @@ impl Board {
         self.goals.iter().find_map(|g| {
             let all_filled = g.iter().all(|cell| cell.is_some());
             if all_filled {
-                return Some(g[0].unwrap());
+                Some(g[0].unwrap())
             } else {
                 None
             }
         })
     }
 
-    pub fn get_pieces(&self, player: Player, enemy: Player) -> (PieceVec, PieceVec) {
-        let mut player_positions = PieceVec::with_capacity(4);
-        let mut enemy_positions = PieceVec::with_capacity(4);
+    pub fn get_pieces(&self, player: Player, _enemy: Player) -> (&PieceVec, &PieceVec) {
+        if player == self.players.0 {
+            (&self.piece_cache.0, &self.piece_cache.1)
+        } else {
+            (&self.piece_cache.1, &self.piece_cache.0)
+        }
+    }
+
+    fn get_pieces_internal(&self, player: Player, enemy: Player) -> (PieceVec, PieceVec) {
+        let mut player_positions = PieceVec::new_const();
+        let mut enemy_positions = PieceVec::new_const();
 
         for (i, piece) in self.tiles.iter().enumerate() {
             match piece {
@@ -90,18 +106,16 @@ impl Board {
         let player_goal = &self.goals[player as usize];
 
         for (i, piece) in player_goal.iter().enumerate() {
-            match piece {
-                Some(_) => player_positions.push(PiecePosition::Goal(i as u8)),
-                _ => {}
+            if piece.is_some() {
+                player_positions.push(PiecePosition::Goal(i as u8))
             }
         }
 
         let enemy_goal = &self.goals[enemy as usize];
 
         for (i, piece) in enemy_goal.iter().enumerate() {
-            match piece {
-                Some(_) => enemy_positions.push(PiecePosition::Goal(i as u8)),
-                _ => {}
+            if piece.is_some() {
+                enemy_positions.push(PiecePosition::Goal(i as u8))
             }
         }
 
@@ -109,7 +123,7 @@ impl Board {
     }
 
     pub fn get_moves(&self, dice: u8, player: Player, enemy: Player) -> MoveVec {
-        let mut moves = MoveVec::with_capacity(4);
+        let mut moves = MoveVec::new_const();
 
         let home_base = &self.home_bases[player as usize];
         let goal = &self.goals[player as usize];
@@ -131,6 +145,7 @@ impl Board {
         for piece in pieces {
             match piece {
                 PiecePosition::Board(current_pos) => {
+                    let current_pos = *current_pos;
                     let new_pos = (current_pos + dice) % self.tiles.len() as u8;
 
                     let goal_relative_pos = match player as usize {
@@ -152,15 +167,14 @@ impl Board {
                     };
 
                     match goal_relative_pos {
-                        Some(pos) => match goal.get(pos as usize) {
-                            Some(None) => {
+                        Some(pos) => {
+                            if let Some(None) = goal.get(pos as usize) {
                                 moves.push(ValidMove::MoveToGoal {
                                     from_board: current_pos,
                                     to_goal: pos,
                                 });
                             }
-                            _ => {}
-                        },
+                        }
                         None => match self.tiles[new_pos as usize] {
                             None => {
                                 moves.push(ValidMove::MovePiece {
@@ -183,20 +197,17 @@ impl Board {
                 PiecePosition::Goal(i) => {
                     let new_pos = i + dice;
 
-                    match goal.get(new_pos as usize) {
-                        Some(None) => {
-                            moves.push(ValidMove::MoveInGoal {
-                                from_goal: i,
-                                to_goal: new_pos,
-                            });
-                        }
-                        _ => {}
+                    if let Some(None) = goal.get(new_pos as usize) {
+                        moves.push(ValidMove::MoveInGoal {
+                            from_goal: *i,
+                            to_goal: new_pos,
+                        });
                     }
                 }
             }
         }
 
-        if moves.len() == 0 {
+        if moves.is_empty() {
             moves.push(ValidMove::SkipTurn);
         }
 
@@ -243,33 +254,40 @@ impl Board {
             }
             ValidMove::SkipTurn => {}
         }
+
+        self.update_piece_cache();
+    }
+
+    pub fn update_piece_cache(&mut self) {
+        self.piece_cache = self.get_pieces_internal(self.players.0, self.players.1);
+    }
+
+    pub fn with_move(&self, player: Player, mov: &ValidMove) -> Cow<'_, Self> {
+        match mov {
+            ValidMove::SkipTurn => Cow::Borrowed(self),
+            otherwise => {
+                let mut board = self.clone();
+                board.perform_move(player, otherwise);
+                Cow::Owned(board)
+            }
+        }
     }
 
     pub fn clockwise_distance(&self, from: u8, to: u8) -> u8 {
-        let mut distance = 0;
-        let mut current = from;
-
-        while current != to {
-            current = (current + 1) % self.tiles.len() as u8;
-            distance += 1;
+        if to >= from {
+            to - from
+        } else {
+            self.tiles.len() as u8 - from + to
         }
-
-        distance
     }
 
     pub fn distance_to_goal(&self, player: Player, pos: u8) -> u8 {
-        match player {
-            Player::Red => 27 - pos,
-            _ => {
-                let start = Self::get_start(player) - 1;
+        let goal = match player {
+            Player::Red => 27,
+            _ => Self::get_start(player) - 1,
+        };
 
-                if pos > start {
-                    28 - pos + start
-                } else {
-                    start - pos
-                }
-            }
-        }
+        self.clockwise_distance(pos, goal)
     }
 }
 
@@ -324,8 +342,9 @@ mod tests {
 
     #[test]
     fn red_goal_move_1() {
-        let mut board = Board::new();
+        let mut board = Board::new(Player::Red, Player::Yellow);
         board.tiles[27] = Some(Player::Red);
+        board.update_piece_cache();
         let moves = board.get_moves(1, Player::Red, Player::Yellow);
 
         assert_eq!(moves.len(), 1);
@@ -345,8 +364,9 @@ mod tests {
 
     #[test]
     fn red_goal_move_2() {
-        let mut board = Board::new();
+        let mut board = Board::new(Player::Red, Player::Yellow);
         board.tiles[26] = Some(Player::Red);
+        board.update_piece_cache();
         let moves = board.get_moves(2, Player::Red, Player::Yellow);
 
         assert_eq!(moves.len(), 1);
@@ -366,8 +386,9 @@ mod tests {
 
     #[test]
     fn yellow_move_around_red_home() {
-        let mut board = Board::new();
+        let mut board = Board::new(Player::Red, Player::Yellow);
         board.tiles[27] = Some(Player::Yellow);
+        board.update_piece_cache();
         let moves = board.get_moves(1, Player::Yellow, Player::Red);
 
         assert_eq!(moves.len(), 1);
@@ -388,7 +409,7 @@ mod tests {
 
     #[test]
     fn yellow_distance_to_goal() {
-        let board = Board::new();
+        let board = Board::new(Player::Red, Player::Yellow);
         assert_eq!(board.distance_to_goal(Player::Yellow, 0), 13);
         assert_eq!(board.distance_to_goal(Player::Yellow, 27), 14);
         assert_eq!(board.distance_to_goal(Player::Yellow, 13), 0);
@@ -397,7 +418,7 @@ mod tests {
 
     #[test]
     fn red_distance_to_goal() {
-        let board = Board::new();
+        let board = Board::new(Player::Red, Player::Yellow);
         assert_eq!(board.distance_to_goal(Player::Red, 0), 27);
         assert_eq!(board.distance_to_goal(Player::Red, 1), 26);
         assert_eq!(board.distance_to_goal(Player::Red, 27), 0);
@@ -406,7 +427,7 @@ mod tests {
 
     #[test]
     fn clockwise_distance_1() {
-        let board = Board::new();
+        let board = Board::new(Player::Red, Player::Yellow);
         assert_eq!(board.clockwise_distance(0, 1), 1);
         assert_eq!(board.clockwise_distance(0, 10), 10);
         assert_eq!(board.clockwise_distance(26, 27), 1);

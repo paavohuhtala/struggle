@@ -36,7 +36,7 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut board = Board::new();
+    let mut board = Board::new(Player::Red, Player::Yellow);
     let sector = (360.0 / board.tiles.len() as f32).to_radians();
 
     let center_x = WIDTH as f32 / 2.0;
@@ -88,7 +88,7 @@ async fn main() {
 
             board.perform_move(current_player, &mov);
 
-            if let Some(_) = board.get_winner() {
+            if board.get_winner().is_some() {
                 winnage = true;
             }
 
@@ -103,7 +103,7 @@ async fn main() {
         }
 
         if is_key_pressed(KeyCode::R) {
-            board = Board::new();
+            board = Board::new(player_a_color, player_b_color);
             winnage = false;
             red_score = 0.0;
             yellow_score = 0.0;

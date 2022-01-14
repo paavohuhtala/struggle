@@ -1,12 +1,12 @@
 use std::borrow::Cow;
 
 use ::rand::{prelude::*, rngs::SmallRng};
+use arrayvec::ArrayVec;
 use itertools::Itertools;
-use smallvec::SmallVec;
 
 use crate::struggle::{Board, PiecePosition, Player, ValidMove};
 
-pub trait StrugglePlayer: Clone {
+pub trait StrugglePlayer: Clone + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
 
     fn select_move<'a>(
@@ -94,69 +94,6 @@ impl StrugglePlayer for RandomDietPlayer {
     }
 }
 
-// Prioritise moving pieces over introducing new ones.
-// It doesn't matter who moves, as long as someone moves.
-#[derive(Clone)]
-pub struct MoveItPlayer;
-
-impl StrugglePlayer for MoveItPlayer {
-    fn select_move<'a>(
-        &mut self,
-        _ctx: &'a GameContext,
-        _board: &'a Board,
-        moves: &'a [ValidMove],
-        rng: &mut SmallRng,
-    ) -> &'a ValidMove {
-        let moving_moves = moves
-            .iter()
-            .filter(|mov| match mov {
-                ValidMove::AddNewPiece { .. } => false,
-                _ => true,
-            })
-            .collect_vec();
-
-        match moving_moves.len() {
-            0 => moves.choose(rng).unwrap(),
-            _ => moving_moves.choose(rng).unwrap(),
-        }
-    }
-
-    fn name(&self) -> Cow<'static, str> {
-        Cow::from("MoveIt")
-    }
-}
-
-// Focus on getting everyone on the board, then play randomly
-#[derive(Clone)]
-pub struct ParticipationAwardPlayer;
-
-impl StrugglePlayer for ParticipationAwardPlayer {
-    fn select_move<'a>(
-        &mut self,
-        _ctx: &'a GameContext,
-        _board: &'a Board,
-        moves: &'a [ValidMove],
-        rng: &mut SmallRng,
-    ) -> &'a ValidMove {
-        let participatory_moves = moves
-            .iter()
-            .filter(|mov| match mov {
-                ValidMove::AddNewPiece { .. } => true,
-                _ => false,
-            })
-            .collect_vec();
-
-        match participatory_moves.len() {
-            0 => moves.choose(rng).unwrap(),
-            _ => participatory_moves.choose(rng).unwrap(),
-        }
-    }
-
-    fn name(&self) -> Cow<'static, str> {
-        Cow::from("ParticipationAward")
-    }
-}
-
 pub type HeuristicFunction = fn(board: &Board, player: Player, enemy: Player) -> f64;
 
 #[derive(Clone)]
@@ -185,51 +122,43 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
         maximizing_player: Player,
         minimizing_player: Player,
         maxiziming: bool,
+        max_depth: u8,
         depth: u8,
     ) -> f64 {
-        if depth == 0 {
+        if depth == max_depth {
             return (self.heuristic)(board, maximizing_player, minimizing_player);
         }
 
         if maxiziming {
-            let mut total_value = 0.0;
+            let mut expected_value = 0.0;
 
             for dice_roll in 1..=6 {
                 let moves = board.get_moves(dice_roll, maximizing_player, minimizing_player);
 
-                let mut best_score = std::f64::NEG_INFINITY;
+                let mut max_score = std::f64::NEG_INFINITY;
 
                 for mov in &moves {
-                    let mut new_board = board.clone();
-                    new_board.perform_move(maximizing_player, mov);
+                    let new_board = board.with_move(maximizing_player, mov);
 
-                    let score = if dice_roll == 6 {
-                        self.expectimax(
-                            &new_board,
-                            maximizing_player,
-                            minimizing_player,
-                            true,
-                            depth - 1,
-                        )
-                    } else {
-                        self.expectimax(
-                            &new_board,
-                            maximizing_player,
-                            minimizing_player,
-                            false,
-                            depth - 1,
-                        )
-                    };
+                    let score = self.expectimax(
+                        &new_board,
+                        maximizing_player,
+                        minimizing_player,
+                        // this should take 6 into account, but that made things worse
+                        false,
+                        max_depth,
+                        depth + 1,
+                    );
 
-                    best_score = best_score.max(score);
+                    max_score = max_score.max(score);
                 }
 
-                total_value += best_score;
+                expected_value += max_score / 6.0;
             }
 
-            total_value / 6.0
+            expected_value
         } else {
-            let mut total_value = 0.0;
+            let mut expected_value = 0.0;
 
             for dice_roll in 1..=6 {
                 let moves = board.get_moves(dice_roll, minimizing_player, maximizing_player);
@@ -237,39 +166,32 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
                 let mut min_score = std::f64::INFINITY;
 
                 for mov in &moves {
-                    let mut new_board = board.clone();
-                    new_board.perform_move(minimizing_player, mov);
+                    let new_board = board.with_move(minimizing_player, mov);
 
-                    let score = if dice_roll == 6 {
-                        self.expectimax(
-                            &new_board,
-                            maximizing_player,
-                            minimizing_player,
-                            false,
-                            depth - 1,
-                        )
-                    } else {
-                        self.expectimax(
-                            &new_board,
-                            maximizing_player,
-                            minimizing_player,
-                            true,
-                            depth - 1,
-                        )
-                    };
+                    let score = self.expectimax(
+                        &new_board,
+                        maximizing_player,
+                        minimizing_player,
+                        // this should take 6 into account, but that made things worse
+                        true,
+                        max_depth,
+                        depth + 1,
+                    );
 
                     min_score = min_score.min(score);
                 }
 
-                total_value += min_score;
+                expected_value += min_score / 6.0;
             }
 
-            total_value / 6.0
+            expected_value
         }
     }
 }
 
-impl<F: Fn(&Board, Player, Player) -> f64 + Clone> StrugglePlayer for GameTreePlayer<F> {
+impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
+    for GameTreePlayer<F>
+{
     fn select_move<'a>(
         &mut self,
         ctx: &'a GameContext,
@@ -277,23 +199,25 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone> StrugglePlayer for GameTreePl
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
-        let mut scored_moves = moves
+        let scored_moves = moves
             .iter()
             .map(|mov| {
-                let mut new_board = board.clone();
-                new_board.perform_move(ctx.current_player, mov);
+                let new_board = board.with_move(ctx.current_player, mov);
 
                 let score = self.expectimax(
                     &new_board,
                     ctx.current_player,
                     ctx.other_player,
+                    // This should technically be ctx.dice == 6,
+                    // but for some reason that is making the AI perform worse :(
                     false,
                     self.max_depth,
+                    0,
                 );
 
                 (mov, score)
             })
-            .collect::<SmallVec<[(&ValidMove, f64); 4]>>();
+            .collect::<ArrayVec<(&ValidMove, f64), 4>>();
 
         let tied = scored_moves
             .iter()
@@ -302,10 +226,11 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone> StrugglePlayer for GameTreePl
         if tied {
             return moves.choose(rng).unwrap();
         } else {
-            scored_moves.sort_by(|(_, score1), (_, score2)| score2.partial_cmp(score1).unwrap());
-            let best = scored_moves[0].0;
-
-            return best;
+            scored_moves
+                .iter()
+                .max_by(|(_, score1), (_, score2)| score1.partial_cmp(score2).unwrap())
+                .unwrap()
+                .0
         }
     }
 
@@ -332,20 +257,19 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
     let my_home = Board::get_start(player);
     let enemy_home = Board::get_start(enemy);
 
-    for piece in &own_pieces {
+    for piece in own_pieces {
         match piece {
             PiecePosition::Board(i) => {
                 let distance_to_goal = board.distance_to_goal(player, *i);
+                let relative_distance = 1.0 - distance_to_goal as f64 / 28.0;
 
                 // discourage moving to enemy home
                 if *i == enemy_home {
                     score += 50.0;
+                } else if distance_to_goal <= 1 {
+                    score += 200.0;
                 } else {
-                    if distance_to_goal <= 2 {
-                        score += 200.0;
-                    } else {
-                        score += 100.0;
-                    }
+                    score += 100.0 + relative_distance;
                 }
 
                 for enemy_i in enemy_pieces
@@ -356,7 +280,7 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
                     let distance_to_enemy = board.clockwise_distance(*i, enemy_i);
 
                     // Small bonus for being within eating distance
-                    if distance_to_enemy >= 1 && distance_to_enemy <= 6 {
+                    if (1..=6).contains(&distance_to_enemy) {
                         score += 20.0;
                     }
                 }
@@ -370,7 +294,7 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
     for piece in enemy_pieces {
         match piece {
             PiecePosition::Board(i) => {
-                if i == my_home {
+                if *i == my_home {
                     score -= 150.0;
                 } else {
                     score -= 300.0;
@@ -381,10 +305,10 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
                     .copied()
                     .filter_map(PiecePosition::as_board_index)
                 {
-                    let distance_to_own = board.clockwise_distance(i, own_i);
+                    let distance_to_own = board.clockwise_distance(*i, own_i);
 
                     // Penalty for being within eating distance
-                    if distance_to_own >= 1 && distance_to_own <= 6 {
+                    if (1..=6).contains(&distance_to_own) {
                         score -= 20.0;
                     }
                 }

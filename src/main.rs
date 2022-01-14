@@ -2,7 +2,11 @@ use ::rand::prelude::*;
 use itertools::Itertools;
 use rayon::prelude::*;
 use struggle_core::{
-    players::{expectimax, GameContext, RandomPlayer, StrugglePlayer},
+    players::{
+        confused_expectimax, expectimax, maximize_options_expectimax, minimize_options_expectimax,
+        participatory_expectimax, worst_expectimax, GameContext, RandomDietPlayer,
+        RandomEaterPlayer, RandomPlayer, StrugglePlayer,
+    },
     struggle::{Board, Player},
 };
 
@@ -11,8 +15,8 @@ static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 #[derive(Debug, Default)]
 struct GameStats {
-    pub turns: [u16; 2],
     pub move_distribution: [[u16; 4]; 2],
+    pub turns: u16,
 }
 
 #[derive(Debug)]
@@ -41,7 +45,7 @@ where
         (player_a.0, player_b.0)
     };
 
-    let mut board = Board::new();
+    let mut board = Board::new(player_a.0, player_b.0);
 
     let mut stats = collect_stats.then(GameStats::default);
 
@@ -63,11 +67,13 @@ where
                 1
             };
 
-            stats.turns[index] += 1;
+            stats.turns += 1;
             stats.move_distribution[index][moves.len() as usize - 1] += 1;
         }
 
-        let mov = if current_player == player_a_color {
+        let mov = if moves.len() == 1 {
+            &moves[0]
+        } else if current_player == player_a_color {
             player_a.1.select_move(&ctx, &board, &moves, &mut rng)
         } else {
             player_b.1.select_move(&ctx, &board, &moves, &mut rng)
@@ -96,11 +102,9 @@ fn print_move_distribution_graph(distribution: [u32; 4]) {
 
     let max = distribution.iter().copied().max().unwrap();
 
-    for i in 0..4 {
-        let bar_length = (distribution[i] as f32 / max as f32) * 50.0;
-        let bar = std::iter::repeat('#')
-            .take(bar_length as usize)
-            .collect::<String>();
+    for (i, hits) in distribution.iter().enumerate() {
+        let bar_length = (*hits as f32 / max as f32) * 50.0;
+        let bar = "#".repeat(bar_length as usize);
         println!(
             "{:>2}: {:<50} ({:.1}%)",
             i + 1,
@@ -110,10 +114,7 @@ fn print_move_distribution_graph(distribution: [u32; 4]) {
     }
 }
 
-pub fn compare_players<
-    A: StrugglePlayer + Clone + Send + Sync,
-    B: StrugglePlayer + Clone + Send + Sync,
->(
+pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
     a: (Player, A),
     b: (Player, B),
     rounds: u32,
@@ -134,14 +135,13 @@ pub fn compare_players<
     games_won_by_a as f64 / rounds as f64
 }
 
-pub fn compare_players_detailed<
-    A: StrugglePlayer + Clone + Send + Sync,
-    B: StrugglePlayer + Clone + Send + Sync,
->(
+pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     a: (Player, A),
     b: (Player, B),
     rounds: u32,
 ) {
+    println!("{} vs {}", a.1.name(), b.1.name());
+
     let results = (0..rounds)
         .into_par_iter()
         .map(|_| {
@@ -183,24 +183,9 @@ pub fn compare_players_detailed<
         .map(|r| r.stats.as_ref().unwrap().as_ref())
         .collect_vec();
 
-    let average_length = stats
-        .iter()
-        .map(|s| s.turns[0] as f64 + s.turns[1] as f64)
-        .sum::<f64>()
-        / stats.len() as f64;
-
-    let mut turns_per_player = [0.0, 0.0];
-
-    for s in stats.iter() {
-        turns_per_player[0] += s.turns[0] as f64;
-        turns_per_player[1] += s.turns[1] as f64;
-    }
-
-    turns_per_player[0] /= stats.len() as f64;
-    turns_per_player[1] /= stats.len() as f64;
+    let average_length = stats.iter().map(|s| s.turns as f64).sum::<f64>() / stats.len() as f64;
 
     println!("avg total turns: {:?}", average_length);
-    println!("avg turns per player: {:?}", turns_per_player);
 
     let mut move_distribution = [[0, 0, 0, 0]; 2];
 
@@ -227,21 +212,81 @@ pub fn compare_players_detailed<
 
     println!("move count distribution:");
 
-    println!("player 1:");
+    println!("{}", a.1.name());
     print_move_distribution_graph(move_distribution[0]);
     println!("{:.1}% of turns had choices", choice_percentage_a);
 
-    println!("player 2:");
+    println!("{}", b.1.name());
     print_move_distribution_graph(move_distribution[1]);
     println!("{:.1}% of turns had choices", choice_percentage_b);
 }
 
-pub fn main() {
-    let total_games = 100_000;
+const TOTAL_GAMES: u32 = 500_000;
 
-    compare_players_detailed(
+macro_rules! run_games {
+    ($($player_l: expr, [$($player_r: expr),*]),+) => {
+        $(
+            {
+                let player_a = $player_l;
+
+                $(
+                    let player_b = $player_r;
+                    let p_a = compare_players((Player::Red, player_a.clone()), (Player::Yellow, player_b.clone()), TOTAL_GAMES);
+                    println!("{} vs {}: {}", player_a.name(), player_b.name(), p_a);
+                )*
+            }
+        )+;
+    };
+}
+
+pub fn main() {
+    // let total_games = 50_000;
+
+    /*compare_players_detailed(
         (Player::Red, expectimax(1)),
         (Player::Yellow, RandomPlayer),
-        total_games,
+        TOTAL_GAMES,
+    );*/
+
+    run_games!(
+        RandomPlayer,
+        [
+            RandomPlayer,
+            RandomEaterPlayer,
+            RandomDietPlayer,
+            expectimax(1),
+            confused_expectimax(1),
+            worst_expectimax(1),
+            participatory_expectimax(1),
+            maximize_options_expectimax(1),
+            minimize_options_expectimax(1)
+        ]
+    );
+
+    run_games!(
+        RandomEaterPlayer,
+        [
+            RandomEaterPlayer,
+            RandomDietPlayer,
+            expectimax(1),
+            confused_expectimax(1),
+            worst_expectimax(1),
+            participatory_expectimax(1),
+            maximize_options_expectimax(1),
+            minimize_options_expectimax(1)
+        ]
+    );
+
+    run_games!(
+        RandomDietPlayer,
+        [
+            RandomDietPlayer,
+            expectimax(1),
+            confused_expectimax(1),
+            worst_expectimax(1),
+            participatory_expectimax(1),
+            maximize_options_expectimax(1),
+            minimize_options_expectimax(1)
+        ]
     );
 }

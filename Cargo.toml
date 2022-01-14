@@ -21,8 +21,8 @@ macroquad = "0.3.13"
 rand = { version = "*", features = ["small_rng"] }
 rayon = "1.5.1"
 itertools = "0.10.3"
-smallvec = "1.7.0"
 mimalloc = { version = "*", default-features = false }
+arrayvec = "0.7.2"
 
 [profile.release]
 debug = 1
