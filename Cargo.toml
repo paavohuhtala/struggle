@@ -23,6 +23,8 @@ rayon = "1.5.1"
 itertools = "0.10.3"
 mimalloc = { version = "*", default-features = false }
 arrayvec = "0.7.2"
+csv = "1.1.6"
+indicatif = { version = "0.16.2", features = ["rayon"] }
 
 [profile.release]
 debug = 1

@@ -1,11 +1,14 @@
+use std::collections::HashMap;
+
 use ::rand::prelude::*;
+use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
 use rayon::prelude::*;
 use struggle_core::{
     players::{
-        confused_expectimax, expectimax, maximize_options_expectimax, minimize_options_expectimax,
-        participatory_expectimax, worst_expectimax, GameContext, RandomDietPlayer,
-        RandomEaterPlayer, RandomPlayer, StrugglePlayer,
+        expectiminimax, maximize_options_expectiminimax, minimize_options_expectiminimax,
+        participatory_expectiminimax, worst_expectiminimax, DilutedPlayer, GameContext,
+        RandomDietPlayer, RandomEaterPlayer, RandomPlayer, StrugglePlayer,
     },
     struggle::{Board, Player},
 };
@@ -135,6 +138,17 @@ pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
     games_won_by_a as f64 / rounds as f64
 }
 
+fn wilson_score(p_hat: f64, samples: u64) -> (f64, f64) {
+    let z: f64 = 1.96;
+
+    let a = p_hat + z * z / (2.0 * samples as f64);
+    let b =
+        z * ((p_hat * (1.0 - p_hat) + z.powi(2) / (4.0 * samples as f64)) / samples as f64).sqrt();
+    let c = 1.0 + z * z / samples as f64;
+
+    ((a - b) / c, (a + b) / c)
+}
+
 pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     a: (Player, A),
     b: (Player, B),
@@ -144,6 +158,7 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
     let results = (0..rounds)
         .into_par_iter()
+        .progress_count(rounds as u64)
         .map(|_| {
             let mut player_a = a.1.clone();
             let mut player_b = b.1.clone();
@@ -166,16 +181,16 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     let total_b_wins = total_games - total_a_wins;
 
     let a_b_win_ratio = total_a_wins as f64 / total_games as f64;
-    let difference_percentage = (a_b_win_ratio - 0.5).abs() * 100.0;
-    let diff_word = if a_b_win_ratio > 0.5 { "more" } else { "less" };
 
     println!(
         "{} games, player A won {}, player B won {}",
         total_games, total_a_wins, total_b_wins
     );
+
+    let confidence_interval = wilson_score(a_b_win_ratio, total_games as u64);
     println!(
-        "p(a_wins) = {:.2} ({:.1}% {})",
-        a_b_win_ratio, difference_percentage, diff_word
+        "p(a_wins) = {:.2} (p95 [{:.4}, {:.4}])",
+        a_b_win_ratio, confidence_interval.0, confidence_interval.1
     );
 
     let stats = results
@@ -224,18 +239,24 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 const TOTAL_GAMES: u32 = 500_000;
 
 macro_rules! run_games {
-    ($($player_l: expr, [$($player_r: expr),*]),+) => {
-        $(
-            {
-                let player_a = $player_l;
+    ($player_l: expr, [$($player_r: expr),*], $out: expr) => {
+        {
+            let output: &mut HashMap<String, HashMap<String, f64>> = $out;
+            let player_a = $player_l;
+            let name = player_a.name();
 
-                $(
-                    let player_b = $player_r;
-                    let p_a = compare_players((Player::Red, player_a.clone()), (Player::Yellow, player_b.clone()), TOTAL_GAMES);
-                    println!("{} vs {}: {}", player_a.name(), player_b.name(), p_a);
-                )*
-            }
-        )+;
+            $(
+                let player_b = $player_r;
+                let name_b = player_b.name();
+                let p_a = compare_players((Player::Red, player_a.clone()), (Player::Yellow, player_b.clone()), TOTAL_GAMES);
+                println!("{} vs {}: {}", name, name_b, p_a);
+                output.entry(name.to_string()).or_insert_with(HashMap::new).insert(name_b.to_string(), p_a);
+
+                if name != name_b {
+                    output.entry(name_b.to_string()).or_insert_with(HashMap::new).insert(name.to_string(), 1.0 - p_a);
+                }
+            )*
+        }
     };
 }
 
@@ -243,10 +264,13 @@ pub fn main() {
     // let total_games = 50_000;
 
     /*compare_players_detailed(
-        (Player::Red, expectimax(1)),
-        (Player::Yellow, RandomPlayer),
+        (Player::Red, maximize_options_expectiminimax(1)),
+        (Player::Yellow, maximize_options_expectiminimax(1)),
         TOTAL_GAMES,
     );*/
+
+    let mut results = HashMap::new();
+    let mut writer = csv::Writer::from_path("./results.csv").unwrap();
 
     run_games!(
         RandomPlayer,
@@ -254,13 +278,15 @@ pub fn main() {
             RandomPlayer,
             RandomEaterPlayer,
             RandomDietPlayer,
-            expectimax(1),
-            confused_expectimax(1),
-            worst_expectimax(1),
-            participatory_expectimax(1),
-            maximize_options_expectimax(1),
-            minimize_options_expectimax(1)
-        ]
+            expectiminimax(1),
+            worst_expectiminimax(1),
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
     );
 
     run_games!(
@@ -268,25 +294,129 @@ pub fn main() {
         [
             RandomEaterPlayer,
             RandomDietPlayer,
-            expectimax(1),
-            confused_expectimax(1),
-            worst_expectimax(1),
-            participatory_expectimax(1),
-            maximize_options_expectimax(1),
-            minimize_options_expectimax(1)
-        ]
+            expectiminimax(1),
+            worst_expectiminimax(1),
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
     );
 
     run_games!(
         RandomDietPlayer,
         [
             RandomDietPlayer,
-            expectimax(1),
-            confused_expectimax(1),
-            worst_expectimax(1),
-            participatory_expectimax(1),
-            maximize_options_expectimax(1),
-            minimize_options_expectimax(1)
-        ]
+            expectiminimax(1),
+            worst_expectiminimax(1),
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
     );
+
+    run_games!(
+        expectiminimax(1),
+        [
+            expectiminimax(1),
+            worst_expectiminimax(1),
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        worst_expectiminimax(1),
+        [
+            worst_expectiminimax(1),
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        participatory_expectiminimax(1),
+        [
+            participatory_expectiminimax(1),
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        maximize_options_expectiminimax(1),
+        [
+            maximize_options_expectiminimax(1),
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        minimize_options_expectiminimax(1),
+        [
+            minimize_options_expectiminimax(1),
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        DilutedPlayer(expectiminimax(1), 0.5),
+        [
+            DilutedPlayer(expectiminimax(1), 0.5),
+            DilutedPlayer(expectiminimax(1), 0.1)
+        ],
+        &mut results
+    );
+
+    run_games!(
+        DilutedPlayer(expectiminimax(1), 0.1),
+        [DilutedPlayer(expectiminimax(1), 0.1)],
+        &mut results
+    );
+
+    let headers = vec![
+        "Random",
+        "RandomDiet",
+        "RandomEater",
+        "Expectiminimax(1)",
+        "WorstExpectiminimax(1)",
+        "ParticipatoryExpectiminimax(1)",
+        "MaximizeOptionsExpectiminimax(1)",
+        "MinimizeOptionsExpectiminimax(1)",
+        "Expectiminimax(1) 50%",
+        "Expectiminimax(1) 10%",
+    ];
+    writer.write_field("").unwrap();
+    writer.write_record(&headers).unwrap();
+
+    for key in &headers {
+        let mut row = vec![key.to_string()];
+
+        for key_b in &headers {
+            let value = *results[*key].get(*key_b).unwrap_or(&0.0);
+            row.push(format!("{:.2}", value));
+        }
+        writer.write_record(&row).unwrap();
+    }
 }

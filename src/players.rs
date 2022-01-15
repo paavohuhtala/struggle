@@ -116,7 +116,7 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
         }
     }
 
-    fn expectimax(
+    fn expectiminimax(
         &self,
         board: &Board,
         maximizing_player: Player,
@@ -140,7 +140,7 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
                 for mov in &moves {
                     let new_board = board.with_move(maximizing_player, mov);
 
-                    let score = self.expectimax(
+                    let score = self.expectiminimax(
                         &new_board,
                         maximizing_player,
                         minimizing_player,
@@ -168,7 +168,7 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
                 for mov in &moves {
                     let new_board = board.with_move(minimizing_player, mov);
 
-                    let score = self.expectimax(
+                    let score = self.expectiminimax(
                         &new_board,
                         maximizing_player,
                         minimizing_player,
@@ -204,7 +204,7 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
             .map(|mov| {
                 let new_board = board.with_move(ctx.current_player, mov);
 
-                let score = self.expectimax(
+                let score = self.expectiminimax(
                     &new_board,
                     ctx.current_player,
                     ctx.other_player,
@@ -322,51 +322,51 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
     score
 }
 
-pub fn expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: default_heuristic,
         max_depth: depth,
-        name: "Expectimax",
+        name: "Expectiminimax",
     }
 }
 
-pub fn confused_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn confused_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |b, p1, p2| default_heuristic(b, p2, p1),
         max_depth: depth,
-        name: "ConfusedExpectimax",
+        name: "ConfusedExpectiminimax",
     }
 }
 
-pub fn worst_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn worst_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |b, p1, p2| -default_heuristic(b, p1, p2),
         max_depth: depth,
-        name: "WorstExpectimax",
+        name: "WorstExpectiminimax",
     }
 }
 
-pub fn random_expectimax() -> impl StrugglePlayer {
+pub fn random_expectiminimax() -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |_, _, _| rand::thread_rng().gen(),
         max_depth: 0,
-        name: "RandomExpectimax",
+        name: "RandomExpectiminimax",
     }
 }
 
-pub fn participatory_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn participatory_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| 4.0 - board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
-        name: "ParticipatoryExpectimax",
+        name: "ParticipatoryExpectiminimax",
     }
 }
 
-pub fn one_at_a_time_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn one_at_a_time_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
-        name: "OneAtATimeExpectimax",
+        name: "OneAtATimeExpectiminimax",
     }
 }
 
@@ -377,19 +377,19 @@ fn count_moves_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
         / 6.0
 }
 
-pub fn maximize_options_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn maximize_options_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: count_moves_heuristic,
         max_depth: depth,
-        name: "MaximizeOptionsExpectimax",
+        name: "MaximizeOptionsExpectiminimax",
     }
 }
 
-pub fn minimize_options_expectimax(depth: u8) -> impl StrugglePlayer {
+pub fn minimize_options_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, enemy| -count_moves_heuristic(board, enemy, player),
         max_depth: depth,
-        name: "MinimizeOptionsExpectimax",
+        name: "MinimizeOptionsExpectiminimax",
     }
 }
 
