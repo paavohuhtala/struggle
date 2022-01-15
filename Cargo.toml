@@ -16,6 +16,10 @@ path = "src/main.rs"
 name = "struggle-viz"
 path = "src/main-viz.rs"
 
+[[bin]]
+name = "struggle-stats"
+path = "src/main-stats.rs"
+
 [dependencies]
 macroquad = "0.3.13"
 rand = { version = "*", features = ["small_rng"] }
@@ -25,7 +29,8 @@ mimalloc = { version = "*", default-features = false }
 arrayvec = "0.7.2"
 csv = "1.1.6"
 indicatif = { version = "0.16.2", features = ["rayon"] }
+plotters = "0.3.1"
 
 [profile.release]
 debug = 1
-lto = true
+# lto = true

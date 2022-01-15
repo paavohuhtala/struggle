@@ -1,102 +1,15 @@
-use std::collections::HashMap;
-
-use ::rand::prelude::*;
 use indicatif::ParallelProgressIterator;
 use itertools::Itertools;
+use plotters::prelude::*;
 use rayon::prelude::*;
 use struggle_core::{
-    players::{
-        expectiminimax, maximize_options_expectiminimax, minimize_options_expectiminimax,
-        participatory_expectiminimax, worst_expectiminimax, DilutedPlayer, GameContext,
-        RandomDietPlayer, RandomEaterPlayer, RandomPlayer, StrugglePlayer,
-    },
-    struggle::{Board, Player},
+    play_game,
+    players::{RandomPlayer, StrugglePlayer},
+    struggle::Player,
 };
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-#[derive(Debug, Default)]
-struct GameStats {
-    pub move_distribution: [[u16; 4]; 2],
-    pub turns: u16,
-}
-
-#[derive(Debug)]
-struct GameResult {
-    pub winner: Player,
-    pub stats: Option<Box<GameStats>>,
-}
-
-fn play_game<'a, A, B>(
-    player_a: (Player, &'a mut A),
-    player_b: (Player, &'a mut B),
-    collect_stats: bool,
-) -> GameResult
-where
-    A: StrugglePlayer,
-    B: StrugglePlayer,
-{
-    let mut rng = SmallRng::from_rng(rand::thread_rng()).unwrap();
-
-    let player_a_color = player_a.0;
-
-    // randomize first player
-    let (mut current_player, mut other_player) = if rng.gen::<bool>() {
-        (player_b.0, player_a.0)
-    } else {
-        (player_a.0, player_b.0)
-    };
-
-    let mut board = Board::new(player_a.0, player_b.0);
-
-    let mut stats = collect_stats.then(GameStats::default);
-
-    loop {
-        let dice = rng.gen_range(1..=6);
-
-        let ctx = GameContext {
-            current_player,
-            other_player,
-            dice,
-        };
-
-        let moves = board.get_moves(dice, current_player, other_player);
-
-        if let Some(stats) = stats.as_mut() {
-            let index = if current_player == player_a_color {
-                0
-            } else {
-                1
-            };
-
-            stats.turns += 1;
-            stats.move_distribution[index][moves.len() as usize - 1] += 1;
-        }
-
-        let mov = if moves.len() == 1 {
-            &moves[0]
-        } else if current_player == player_a_color {
-            player_a.1.select_move(&ctx, &board, &moves, &mut rng)
-        } else {
-            player_b.1.select_move(&ctx, &board, &moves, &mut rng)
-        }
-        .clone();
-
-        board.perform_move(current_player, &mov);
-
-        if let Some(winner) = board.get_winner() {
-            return GameResult {
-                winner,
-                stats: stats.map(Box::new),
-            };
-        }
-
-        if dice != 6 {
-            std::mem::swap(&mut current_player, &mut other_player);
-        }
-    }
-}
 
 fn print_move_distribution_graph(distribution: [u32; 4]) {
     println!("{:?}", distribution);
@@ -117,27 +30,6 @@ fn print_move_distribution_graph(distribution: [u32; 4]) {
     }
 }
 
-pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
-    a: (Player, A),
-    b: (Player, B),
-    rounds: u32,
-) -> f64 {
-    let a_color = a.0;
-    let b_color = b.0;
-
-    let games_won_by_a = (0..rounds)
-        .into_par_iter()
-        .map(|_| {
-            let mut player_a = a.1.clone();
-            let mut player_b = b.1.clone();
-            play_game((a_color, &mut player_a), (b_color, &mut player_b), false)
-        })
-        .filter(|res| res.winner == a_color)
-        .count();
-
-    games_won_by_a as f64 / rounds as f64
-}
-
 fn wilson_score(p_hat: f64, samples: u64) -> (f64, f64) {
     let z: f64 = 1.96;
 
@@ -156,6 +48,9 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 ) {
     println!("{} vs {}", a.1.name(), b.1.name());
 
+    let drawing_area = SVGBackend::new("length_distribution.svg", (1000, 500)).into_drawing_area();
+    drawing_area.fill(&WHITE).unwrap();
+
     let results = (0..rounds)
         .into_par_iter()
         .progress_count(rounds as u64)
@@ -165,6 +60,45 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
             play_game((a.0, &mut player_a), (b.0, &mut player_b), true)
         })
         .collect::<Vec<_>>();
+
+    let stats = results
+        .iter()
+        .map(|r| r.stats.as_ref().unwrap().as_ref())
+        .collect_vec();
+
+    let turns = stats.iter().map(|s| s.turns as u32).collect_vec();
+    let (&min_turns, &max_turns) = turns.iter().minmax().into_option().unwrap();
+    let turn_counts = turns.iter().counts();
+    let most_common_turn = turn_counts.values().copied().max().unwrap() as u32;
+
+    let mut ctx = ChartBuilder::on(&drawing_area)
+        .set_label_area_size(LabelAreaPosition::Left, 40)
+        .set_label_area_size(LabelAreaPosition::Bottom, 40)
+        .caption(
+            format!(
+                "Game length distribution: {} vs {} (n={})",
+                a.1.name(),
+                b.1.name(),
+                results.len()
+            ),
+            ("Source Sans Pro, sans-serif", 20),
+        )
+        .build_cartesian_2d(
+            ((min_turns - 2)..(max_turns + 2)).into_segmented(),
+            0..(most_common_turn + 5),
+        )
+        .unwrap();
+
+    ctx.configure_mesh().draw().unwrap();
+
+    ctx.draw_series((min_turns..=max_turns).map(|i| {
+        let count = *turn_counts.get(&i).unwrap_or(&0);
+        let x0 = SegmentValue::Exact(i);
+        let x1 = SegmentValue::Exact(i + 1);
+        let bar = Rectangle::new([(x0, 0), (x1, count as u32)], GREEN.filled());
+        bar
+    }))
+    .unwrap();
 
     let total_a_wins = results.iter().fold(
         0,
@@ -192,11 +126,6 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         "p(a_wins) = {:.2} (p95 [{:.4}, {:.4}])",
         a_b_win_ratio, confidence_interval.0, confidence_interval.1
     );
-
-    let stats = results
-        .iter()
-        .map(|r| r.stats.as_ref().unwrap().as_ref())
-        .collect_vec();
 
     let average_length = stats.iter().map(|s| s.turns as f64).sum::<f64>() / stats.len() as f64;
 
@@ -236,187 +165,10 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     println!("{:.1}% of turns had choices", choice_percentage_b);
 }
 
-const TOTAL_GAMES: u32 = 500_000;
-
-macro_rules! run_games {
-    ($player_l: expr, [$($player_r: expr),*], $out: expr) => {
-        {
-            let output: &mut HashMap<String, HashMap<String, f64>> = $out;
-            let player_a = $player_l;
-            let name = player_a.name();
-
-            $(
-                let player_b = $player_r;
-                let name_b = player_b.name();
-                let p_a = compare_players((Player::Red, player_a.clone()), (Player::Yellow, player_b.clone()), TOTAL_GAMES);
-                println!("{} vs {}: {}", name, name_b, p_a);
-                output.entry(name.to_string()).or_insert_with(HashMap::new).insert(name_b.to_string(), p_a);
-
-                if name != name_b {
-                    output.entry(name_b.to_string()).or_insert_with(HashMap::new).insert(name.to_string(), 1.0 - p_a);
-                }
-            )*
-        }
-    };
-}
-
 pub fn main() {
-    // let total_games = 50_000;
-
-    /*compare_players_detailed(
-        (Player::Red, maximize_options_expectiminimax(1)),
-        (Player::Yellow, maximize_options_expectiminimax(1)),
-        TOTAL_GAMES,
-    );*/
-
-    let mut results = HashMap::new();
-    let mut writer = csv::Writer::from_path("./results.csv").unwrap();
-
-    run_games!(
-        RandomPlayer,
-        [
-            RandomPlayer,
-            RandomEaterPlayer,
-            RandomDietPlayer,
-            expectiminimax(1),
-            worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
+    compare_players_detailed(
+        (Player::Red, RandomPlayer),
+        (Player::Yellow, RandomPlayer),
+        100_000,
     );
-
-    run_games!(
-        RandomEaterPlayer,
-        [
-            RandomEaterPlayer,
-            RandomDietPlayer,
-            expectiminimax(1),
-            worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        RandomDietPlayer,
-        [
-            RandomDietPlayer,
-            expectiminimax(1),
-            worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        expectiminimax(1),
-        [
-            expectiminimax(1),
-            worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        worst_expectiminimax(1),
-        [
-            worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        participatory_expectiminimax(1),
-        [
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        maximize_options_expectiminimax(1),
-        [
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        minimize_options_expectiminimax(1),
-        [
-            minimize_options_expectiminimax(1),
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        DilutedPlayer(expectiminimax(1), 0.5),
-        [
-            DilutedPlayer(expectiminimax(1), 0.5),
-            DilutedPlayer(expectiminimax(1), 0.1)
-        ],
-        &mut results
-    );
-
-    run_games!(
-        DilutedPlayer(expectiminimax(1), 0.1),
-        [DilutedPlayer(expectiminimax(1), 0.1)],
-        &mut results
-    );
-
-    let headers = vec![
-        "Random",
-        "RandomDiet",
-        "RandomEater",
-        "Expectiminimax(1)",
-        "WorstExpectiminimax(1)",
-        "ParticipatoryExpectiminimax(1)",
-        "MaximizeOptionsExpectiminimax(1)",
-        "MinimizeOptionsExpectiminimax(1)",
-        "Expectiminimax(1) 50%",
-        "Expectiminimax(1) 10%",
-    ];
-    writer.write_field("").unwrap();
-    writer.write_record(&headers).unwrap();
-
-    for key in &headers {
-        let mut row = vec![key.to_string()];
-
-        for key_b in &headers {
-            let value = *results[*key].get(*key_b).unwrap_or(&0.0);
-            row.push(format!("{:.2}", value));
-        }
-        writer.write_record(&row).unwrap();
-    }
 }
