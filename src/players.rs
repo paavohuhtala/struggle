@@ -11,7 +11,7 @@ pub trait StrugglePlayer: Clone + Send + Sync {
 
     fn select_move<'a>(
         &mut self,
-        ctx: &'a GameContext,
+        ctx: &GameContext,
         board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
@@ -31,7 +31,7 @@ pub struct RandomPlayer;
 impl StrugglePlayer for RandomPlayer {
     fn select_move<'a>(
         &mut self,
-        _ctx: &'a GameContext,
+        _ctx: &GameContext,
         _board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
@@ -51,7 +51,7 @@ pub struct RandomEaterPlayer;
 impl StrugglePlayer for RandomEaterPlayer {
     fn select_move<'a>(
         &mut self,
-        _ctx: &'a GameContext,
+        _ctx: &GameContext,
         _board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
@@ -76,7 +76,7 @@ pub struct RandomDietPlayer;
 impl StrugglePlayer for RandomDietPlayer {
     fn select_move<'a>(
         &mut self,
-        _ctx: &'a GameContext,
+        _ctx: &GameContext,
         _board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
@@ -194,7 +194,7 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
 {
     fn select_move<'a>(
         &mut self,
-        ctx: &'a GameContext,
+        ctx: &GameContext,
         board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
@@ -267,7 +267,7 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
                 if *i == enemy_home {
                     score += 50.0;
                 } else if distance_to_goal <= 1 {
-                    score += 200.0;
+                    score += 175.0;
                 } else {
                     score += 100.0 + relative_distance;
                 }
@@ -281,12 +281,12 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
 
                     // Small bonus for being within eating distance
                     if (1..=6).contains(&distance_to_enemy) {
-                        score += 20.0;
+                        score += 40.0;
                     }
                 }
             }
-            PiecePosition::Goal(_) => {
-                score += 10000.0;
+            PiecePosition::Goal(n) => {
+                score += 10000.0 + (*n as f64 / 3.0) * 10.0;
             }
         }
     }
@@ -309,7 +309,7 @@ pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
 
                     // Penalty for being within eating distance
                     if (1..=6).contains(&distance_to_own) {
-                        score -= 20.0;
+                        score -= 25.0;
                     }
                 }
             }
@@ -385,11 +385,107 @@ pub fn maximize_options_expectiminimax(depth: u8) -> impl StrugglePlayer {
     }
 }
 
-pub fn minimize_options_expectiminimax(depth: u8) -> impl StrugglePlayer {
+pub fn minimize_options_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, enemy| -count_moves_heuristic(board, enemy, player),
-        max_depth: depth,
+        max_depth,
         name: "MinimizeOptionsExpectiminimax",
+    }
+}
+
+fn maximize_length_heuristic(board: &Board) -> f64 {
+    if board.get_winner().is_some() {
+        return -1000000.0;
+    }
+
+    let players = board.players();
+    let (a_pieces, b_pieces) = board.get_pieces(players.0, players.1);
+    let mut score = 0.0;
+
+    score -= board.home_bases[players.0 as usize].pieces_waiting as f64 * 2.0;
+    score -= board.home_bases[players.1 as usize].pieces_waiting as f64 * 2.0;
+
+    for (player, pieces) in &[(players.0, a_pieces), (players.1, b_pieces)] {
+        for piece in pieces.iter() {
+            match piece {
+                PiecePosition::Board(pos) => {
+                    let distance_to_goal = board.distance_to_goal(*player, *pos);
+                    let relative_distance = 1.0 - distance_to_goal as f64 / 28.0;
+
+                    score -= relative_distance * 50.0;
+                }
+                PiecePosition::Goal(_) => {
+                    score -= 1000.0;
+                }
+            }
+        }
+    }
+
+    score
+}
+
+pub fn maximize_length_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
+    GameTreePlayer {
+        heuristic: |board, _player, _enemy| maximize_length_heuristic(board),
+        max_depth,
+        name: "MaximizeLengthExpectiminimax",
+    }
+}
+
+#[derive(Clone)]
+pub struct StatefulGetItOverWith {
+    supporting: Option<Player>,
+    max_depth: u8,
+}
+
+pub fn stateful_get_it_over_with(max_depth: u8) -> impl StrugglePlayer {
+    StatefulGetItOverWith {
+        supporting: None,
+        max_depth,
+    }
+}
+
+impl StrugglePlayer for StatefulGetItOverWith {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("GetItOverWith")
+    }
+
+    fn select_move<'a>(
+        &mut self,
+        ctx: &GameContext,
+        board: &'a Board,
+        moves: &'a [ValidMove],
+        rng: &mut SmallRng,
+    ) -> &'a ValidMove {
+        if self.supporting.is_none() {
+            let own_pieces_in_goal = board.pieces_in_goal(ctx.current_player);
+            let enemy_pieces_in_goal = board.pieces_in_goal(ctx.other_player);
+
+            self.supporting = if own_pieces_in_goal >= 1 {
+                Some(ctx.current_player)
+            } else if enemy_pieces_in_goal >= 1 {
+                Some(ctx.other_player)
+            } else {
+                None
+            };
+        }
+
+        if let Some(supporting) = self.supporting {
+            GameTreePlayer {
+                max_depth: self.max_depth,
+                name: "GetItOverWithInternal",
+                heuristic: |board, player, enemy| {
+                    if player == supporting {
+                        default_heuristic(board, player, enemy)
+                    } else {
+                        default_heuristic(board, enemy, player)
+                    }
+                },
+            }
+            .select_move(&ctx, board, moves, rng)
+        } else {
+            RandomPlayer.select_move(ctx, board, moves, rng)
+        }
     }
 }
 
@@ -399,7 +495,7 @@ pub struct DilutedPlayer<P: StrugglePlayer>(pub P, pub f64);
 impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
     fn select_move<'a>(
         &mut self,
-        ctx: &'a GameContext,
+        ctx: &GameContext,
         board: &'a Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,

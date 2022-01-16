@@ -1,7 +1,7 @@
 use struggle_core::{
     players::{
-        default_heuristic, one_at_a_time_expectiminimax, random_expectiminimax, GameContext,
-        StrugglePlayer,
+        default_heuristic, maximize_length_expectiminimax, one_at_a_time_expectiminimax,
+        random_expectiminimax, GameContext, StrugglePlayer,
     },
     struggle::{Board, Player, COLORS},
 };
@@ -43,8 +43,8 @@ async fn main() {
     let center_x = WIDTH as f32 / 2.0;
     let center_y = HEIGHT as f32 / 2.0;
 
-    let mut player_a = (Player::Red, one_at_a_time_expectiminimax(2));
-    let mut player_b = (Player::Yellow, random_expectiminimax());
+    let mut player_a = (Player::Red, maximize_length_expectiminimax(2));
+    let mut player_b = (Player::Yellow, maximize_length_expectiminimax(2));
 
     let player_a_color = player_a.0;
     let player_b_color = player_b.0;

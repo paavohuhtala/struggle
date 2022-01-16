@@ -4,7 +4,10 @@ use plotters::prelude::*;
 use rayon::prelude::*;
 use struggle_core::{
     play_game,
-    players::{RandomPlayer, StrugglePlayer},
+    players::{
+        expectiminimax, maximize_length_expectiminimax, stateful_get_it_over_with,
+        worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer, RandomPlayer, StrugglePlayer,
+    },
     struggle::Player,
 };
 
@@ -55,9 +58,9 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         .into_par_iter()
         .progress_count(rounds as u64)
         .map(|_| {
-            let mut player_a = a.1.clone();
-            let mut player_b = b.1.clone();
-            play_game((a.0, &mut player_a), (b.0, &mut player_b), true)
+            let player_a = a.1.clone();
+            let player_b = b.1.clone();
+            play_game((a.0, player_a), (b.0, player_b), true)
         })
         .collect::<Vec<_>>();
 
@@ -127,9 +130,13 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         a_b_win_ratio, confidence_interval.0, confidence_interval.1
     );
 
-    let average_length = stats.iter().map(|s| s.turns as f64).sum::<f64>() / stats.len() as f64;
+    let average_length = turns.iter().copied().map(|i| i as f64).sum::<f64>() / total_games as f64;
+    let (shortest_game, longest_game) = turns.iter().copied().minmax().into_option().unwrap();
 
-    println!("avg total turns: {:?}", average_length);
+    println!(
+        "average game length: {:.1} ({}..{})",
+        average_length, shortest_game, longest_game
+    );
 
     let mut move_distribution = [[0, 0, 0, 0]; 2];
 
@@ -140,14 +147,14 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         }
     }
 
-    let choice_percentage_a = move_distribution[0][1..3]
+    let choice_percentage_a = move_distribution[0][1..4]
         .iter()
         .map(|&i| i as f64)
         .sum::<f64>()
         / move_distribution[0].iter().map(|&i| i as f64).sum::<f64>()
         * 100.0;
 
-    let choice_percentage_b = move_distribution[1][1..3]
+    let choice_percentage_b = move_distribution[1][1..4]
         .iter()
         .map(|&i| i as f64)
         .sum::<f64>()
@@ -167,8 +174,8 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
 pub fn main() {
     compare_players_detailed(
-        (Player::Red, RandomPlayer),
-        (Player::Yellow, RandomPlayer),
+        (Player::Red, maximize_length_expectiminimax(2)),
+        (Player::Yellow, maximize_length_expectiminimax(2)),
         100_000,
     );
 }

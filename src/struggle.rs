@@ -89,6 +89,10 @@ impl Board {
         }
     }
 
+    pub fn players(&self) -> (Player, Player) {
+        self.players
+    }
+
     fn get_pieces_internal(&self, player: Player, enemy: Player) -> (PieceVec, PieceVec) {
         let mut player_positions = PieceVec::new_const();
         let mut enemy_positions = PieceVec::new_const();
@@ -288,6 +292,13 @@ impl Board {
         };
 
         self.clockwise_distance(pos, goal)
+    }
+
+    pub fn pieces_in_goal(&self, player: Player) -> u8 {
+        self.goals[player as usize]
+            .iter()
+            .filter_map(|p| p.as_ref())
+            .count() as u8
     }
 }
 

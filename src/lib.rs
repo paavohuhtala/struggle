@@ -17,9 +17,9 @@ pub struct GameResult {
     pub stats: Option<Box<GameStats>>,
 }
 
-pub fn play_game<'a, A, B>(
-    player_a: (Player, &'a mut A),
-    player_b: (Player, &'a mut B),
+pub fn play_game<A, B>(
+    mut player_a: (Player, A),
+    mut player_b: (Player, B),
     collect_stats: bool,
 ) -> GameResult
 where

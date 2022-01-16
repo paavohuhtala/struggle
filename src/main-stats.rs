@@ -25,9 +25,9 @@ pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
     let games_won_by_a = (0..rounds)
         .into_par_iter()
         .map(|_| {
-            let mut player_a = a.1.clone();
-            let mut player_b = b.1.clone();
-            play_game((a_color, &mut player_a), (b_color, &mut player_b), false)
+            let player_a = a.1.clone();
+            let player_b = b.1.clone();
+            play_game((a_color, player_a), (b_color, player_b), false)
         })
         .filter(|res| res.winner == a_color)
         .count();
