@@ -4,9 +4,9 @@ use rayon::prelude::*;
 use struggle_core::{
     play_game,
     players::{
-        expectiminimax, maximize_options_expectiminimax, minimize_options_expectiminimax,
-        participatory_expectiminimax, worst_expectiminimax, DilutedPlayer, RandomDietPlayer,
-        RandomEaterPlayer, RandomPlayer, StrugglePlayer,
+        expectiminimax, maximize_options, minimize_options, participation_award,
+        worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
+        StrugglePlayer,
     },
     struggle::Player,
 };
@@ -71,9 +71,9 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -87,9 +87,9 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -102,9 +102,9 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -116,9 +116,9 @@ pub fn main() {
         [
             expectiminimax(1),
             worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -129,9 +129,9 @@ pub fn main() {
         worst_expectiminimax(1),
         [
             worst_expectiminimax(1),
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -139,11 +139,11 @@ pub fn main() {
     );
 
     run_games!(
-        participatory_expectiminimax(1),
+        participation_award(1),
         [
-            participatory_expectiminimax(1),
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            participation_award(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -151,10 +151,10 @@ pub fn main() {
     );
 
     run_games!(
-        maximize_options_expectiminimax(1),
+        maximize_options(1),
         [
-            maximize_options_expectiminimax(1),
-            minimize_options_expectiminimax(1),
+            maximize_options(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],
@@ -162,9 +162,9 @@ pub fn main() {
     );
 
     run_games!(
-        minimize_options_expectiminimax(1),
+        minimize_options(1),
         [
-            minimize_options_expectiminimax(1),
+            minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
             DilutedPlayer(expectiminimax(1), 0.1)
         ],

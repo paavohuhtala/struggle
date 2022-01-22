@@ -330,14 +330,6 @@ pub fn expectiminimax(depth: u8) -> impl StrugglePlayer {
     }
 }
 
-pub fn confused_expectiminimax(depth: u8) -> impl StrugglePlayer {
-    GameTreePlayer {
-        heuristic: |b, p1, p2| default_heuristic(b, p2, p1),
-        max_depth: depth,
-        name: "ConfusedExpectiminimax",
-    }
-}
-
 pub fn worst_expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |b, p1, p2| -default_heuristic(b, p1, p2),
@@ -346,27 +338,73 @@ pub fn worst_expectiminimax(depth: u8) -> impl StrugglePlayer {
     }
 }
 
-pub fn random_expectiminimax() -> impl StrugglePlayer {
+pub fn participation_award(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
-        heuristic: |_, _, _| rand::thread_rng().gen(),
-        max_depth: 0,
-        name: "RandomExpectiminimax",
-    }
-}
-
-pub fn participatory_expectiminimax(depth: u8) -> impl StrugglePlayer {
-    GameTreePlayer {
-        heuristic: |board, player, _| 4.0 - board.home_bases[player as usize].pieces_waiting as f64,
+        heuristic: |board, player, _| -(board.home_bases[player as usize].pieces_waiting as f64),
         max_depth: depth,
-        name: "ParticipatoryExpectiminimax",
+        name: "ParticipationAward",
     }
 }
 
-pub fn one_at_a_time_expectiminimax(depth: u8) -> impl StrugglePlayer {
+pub fn one_at_a_time(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
-        name: "OneAtATimeExpectiminimax",
+        name: "OneAtATime",
+    }
+}
+
+fn one_at_a_time_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
+    let (own_pieces, enemy_pieces) = board.get_pieces(player, enemy);
+
+    let mut score = 0.0;
+
+    match board.get_winner() {
+        Some(winner) if winner == player => {
+            return 10000000.0;
+        }
+        Some(_) => {
+            return -10000000.0;
+        }
+        None => {}
+    }
+
+    let mut own_pieces_on_board = 0;
+
+    for piece in own_pieces {
+        match piece {
+            PiecePosition::Board(_) => {
+                own_pieces_on_board += 1;
+            }
+            PiecePosition::Goal(_) => {
+                score += 10000.0;
+            }
+        }
+    }
+
+    if own_pieces_on_board > 1 {
+        score -= (own_pieces_on_board - 1) as f64 * 100.0;
+    }
+
+    for piece in enemy_pieces {
+        match piece {
+            PiecePosition::Board(_) => {
+                score -= 2000.0;
+            }
+            PiecePosition::Goal(_) => {
+                score -= 10000.0;
+            }
+        }
+    }
+
+    score
+}
+
+pub fn one_at_a_time_deluxe(max_depth: u8) -> impl StrugglePlayer {
+    GameTreePlayer {
+        heuristic: one_at_a_time_heuristic,
+        max_depth,
+        name: "OneAtATimeDeluxe",
     }
 }
 
@@ -377,19 +415,19 @@ fn count_moves_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
         / 6.0
 }
 
-pub fn maximize_options_expectiminimax(depth: u8) -> impl StrugglePlayer {
+pub fn maximize_options(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: count_moves_heuristic,
         max_depth: depth,
-        name: "MaximizeOptionsExpectiminimax",
+        name: "MaximizeOptions",
     }
 }
 
-pub fn minimize_options_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
+pub fn minimize_options(max_depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, enemy| -count_moves_heuristic(board, enemy, player),
         max_depth,
-        name: "MinimizeOptionsExpectiminimax",
+        name: "MinimizeOptions",
     }
 }
 
@@ -428,7 +466,7 @@ pub fn maximize_length_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, _player, _enemy| maximize_length_heuristic(board),
         max_depth,
-        name: "MaximizeLengthExpectiminimax",
+        name: "MaximizeLength",
     }
 }
 

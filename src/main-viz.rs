@@ -1,8 +1,5 @@
 use struggle_core::{
-    players::{
-        default_heuristic, maximize_length_expectiminimax, one_at_a_time_expectiminimax,
-        random_expectiminimax, GameContext, StrugglePlayer,
-    },
+    players::{default_heuristic, maximize_length_expectiminimax, GameContext, StrugglePlayer},
     struggle::{Board, Player, COLORS},
 };
 

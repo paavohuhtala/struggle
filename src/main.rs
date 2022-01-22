@@ -5,8 +5,9 @@ use rayon::prelude::*;
 use struggle_core::{
     play_game,
     players::{
-        expectiminimax, maximize_length_expectiminimax, stateful_get_it_over_with,
-        worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer, RandomPlayer, StrugglePlayer,
+        expectiminimax, maximize_length_expectiminimax, one_at_a_time_deluxe,
+        stateful_get_it_over_with, worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer,
+        RandomPlayer, StrugglePlayer,
     },
     struggle::Player,
 };
@@ -174,8 +175,8 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
 pub fn main() {
     compare_players_detailed(
-        (Player::Red, maximize_length_expectiminimax(2)),
-        (Player::Yellow, maximize_length_expectiminimax(2)),
-        100_000,
+        (Player::Red, one_at_a_time_deluxe(2)),
+        (Player::Yellow, RandomPlayer),
+        100_00,
     );
 }
