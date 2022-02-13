@@ -50,7 +50,7 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     b: (Player, B),
     rounds: u32,
 ) {
-    println!("{} vs {}", a.1.name(), b.1.name());
+    println!("{} ({:?}) vs {} ({:?})", a.1.name(), a.0, b.1.name(), b.0);
 
     let drawing_area = SVGBackend::new("length_distribution.svg", (1000, 500)).into_drawing_area();
     drawing_area.fill(&WHITE).unwrap();
@@ -166,17 +166,23 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
     println!("{}", a.1.name());
     print_move_distribution_graph(move_distribution[0]);
-    println!("{:.1}% of turns had choices", choice_percentage_a);
+    println!(
+        "{:.1}% of turns had more than 1 option",
+        choice_percentage_a
+    );
 
     println!("{}", b.1.name());
     print_move_distribution_graph(move_distribution[1]);
-    println!("{:.1}% of turns had choices", choice_percentage_b);
+    println!(
+        "{:.1}% of turns had more than 1 option",
+        choice_percentage_b
+    );
 }
 
 pub fn main() {
     compare_players_detailed(
-        (Player::Red, one_at_a_time_deluxe(2)),
-        (Player::Yellow, RandomPlayer),
-        100_00,
+        (Player::Red, RandomDietPlayer),
+        (Player::Yellow, RandomEaterPlayer),
+        500_000,
     );
 }

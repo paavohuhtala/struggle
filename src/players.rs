@@ -12,7 +12,7 @@ pub trait StrugglePlayer: Clone + Send + Sync {
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
-        board: &'a Board,
+        board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove;
@@ -32,7 +32,7 @@ impl StrugglePlayer for RandomPlayer {
     fn select_move<'a>(
         &mut self,
         _ctx: &GameContext,
-        _board: &'a Board,
+        _board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
@@ -52,7 +52,7 @@ impl StrugglePlayer for RandomEaterPlayer {
     fn select_move<'a>(
         &mut self,
         _ctx: &GameContext,
-        _board: &'a Board,
+        _board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
@@ -77,7 +77,7 @@ impl StrugglePlayer for RandomDietPlayer {
     fn select_move<'a>(
         &mut self,
         _ctx: &GameContext,
-        _board: &'a Board,
+        _board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
@@ -195,7 +195,7 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
-        board: &'a Board,
+        board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
@@ -491,7 +491,7 @@ impl StrugglePlayer for StatefulGetItOverWith {
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
-        board: &'a Board,
+        board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
@@ -534,7 +534,7 @@ impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
-        board: &'a Board,
+        board: &Board,
         moves: &'a [ValidMove],
         rng: &mut SmallRng,
     ) -> &'a ValidMove {
