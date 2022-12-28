@@ -4,7 +4,10 @@ use ::rand::{prelude::*, rngs::SmallRng};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 
-use crate::struggle::{Board, PiecePosition, PlayerColor, ValidMove};
+use super::{
+    board::{Board, PiecePosition, ValidMove},
+    PlayerColor,
+};
 
 pub trait StrugglePlayer: Clone + Send + Sync {
     fn name(&self) -> Cow<'static, str>;

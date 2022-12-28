@@ -2,13 +2,15 @@ use std::collections::HashMap;
 
 use rayon::prelude::*;
 use struggle_core::{
-    game::{play_game, AiStrugglePlayer, StruggleGame},
-    players::{
-        expectiminimax, maximize_options, minimize_options, participation_award,
-        worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
-        StrugglePlayer,
+    game::play_game,
+    games::struggle::{
+        players::{
+            expectiminimax, maximize_options, minimize_options, participation_award,
+            worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
+            StrugglePlayer,
+        },
+        AiStrugglePlayer, PlayerColor, StruggleGame,
     },
-    struggle::PlayerColor,
 };
 
 #[global_allocator]

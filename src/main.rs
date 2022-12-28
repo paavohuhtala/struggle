@@ -3,9 +3,11 @@ use itertools::Itertools;
 use plotters::prelude::*;
 use rayon::prelude::*;
 use struggle_core::{
-    game::{play_game, AiStrugglePlayer, StruggleGame},
-    players::{maximize_length_expectiminimax, RandomPlayer, StrugglePlayer},
-    struggle::PlayerColor,
+    game::play_game,
+    games::struggle::{
+        players::{RandomPlayer, StrugglePlayer},
+        AiStrugglePlayer, PlayerColor, StruggleGame,
+    },
 };
 
 #[global_allocator]

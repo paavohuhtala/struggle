@@ -2,20 +2,7 @@ use std::borrow::Cow;
 
 use arrayvec::ArrayVec;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
-pub enum PlayerColor {
-    Red = 0,
-    Blue,
-    Yellow,
-    Green,
-}
-
-pub const COLORS: [PlayerColor; 4] = [
-    PlayerColor::Red,
-    PlayerColor::Blue,
-    PlayerColor::Yellow,
-    PlayerColor::Green,
-];
+use super::{PlayerColor, COLORS};
 
 type BoardCell = Option<PlayerColor>;
 

@@ -1,11 +1,12 @@
-use struggle_core::{
-    game::{AiStrugglePlayer, RaceGame, StruggleGame, TurnResult},
-    players::maximize_length_expectiminimax,
-    struggle::{Board, PlayerColor, COLORS},
-};
-
 use ::rand::prelude::*;
 use macroquad::prelude::*;
+use struggle_core::{
+    game::{RaceGame, TurnResult},
+    games::struggle::{
+        board::Board, players::maximize_length_expectiminimax, AiStrugglePlayer, PlayerColor,
+        StruggleGame, COLORS,
+    },
+};
 
 pub const WIDTH: usize = 1000;
 pub const HEIGHT: usize = 1000;
