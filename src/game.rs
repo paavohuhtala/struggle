@@ -18,7 +18,7 @@ pub trait RaceGame {
     type MoveVector;
 
     type TurnContext;
-    type DiceState;
+    type DiceState: Clone;
 
     fn board(&self) -> &Self::Board;
     fn current_player(&self) -> Self::PlayerId;
@@ -44,21 +44,21 @@ pub trait RaceGame {
         rng: &mut SmallRng,
     ) -> &'a Self::Move;
 
-    fn play_turn(&mut self, rng: &mut SmallRng) -> TurnResult<Self::PlayerId> {
+    fn play_turn(&mut self, rng: &mut SmallRng) -> (Self::DiceState, TurnResult<Self::PlayerId>) {
         let dice = Self::throw_dice(rng);
-        let ctx = self.create_turn_context(dice);
+        let ctx = self.create_turn_context(dice.clone());
 
         let moves = self.get_moves(&ctx);
         let mov = self.select_move(&ctx, &moves, rng);
 
-        self.apply_move(&ctx, mov)
+        (dice, self.apply_move(&ctx, mov))
     }
 }
 
 pub fn play_game<G: RaceGame>(game: &mut G) -> G::PlayerId {
     let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
     loop {
-        match game.play_turn(rng) {
+        match game.play_turn(rng).1 {
             TurnResult::PlayAgain => {}
             TurnResult::PassTo(player) => {
                 game.set_current_player(player);

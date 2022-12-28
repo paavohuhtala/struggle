@@ -49,9 +49,6 @@ async fn main() {
 
     let mut winner = None;
 
-    let mut red_score = 0.0;
-    let mut yellow_score = 0.0;
-
     let mut last_die = 0;
     let mut last_die_player = PlayerColor::Red;
 
@@ -61,7 +58,12 @@ async fn main() {
         let time = get_time();
 
         if time > next_tick && winner.is_none() {
-            match game.play_turn(&mut rng) {
+            let (dice, result) = game.play_turn(&mut rng);
+
+            last_die = dice;
+            last_die_player = game.current_player();
+
+            match result {
                 TurnResult::PlayAgain => {}
                 TurnResult::PassTo(player) => {
                     game.set_current_player(player);
@@ -79,8 +81,6 @@ async fn main() {
         if is_key_pressed(KeyCode::R) {
             game = StruggleGame::new(player_a.clone(), player_b.clone(), false);
             winner = None;
-            red_score = 0.0;
-            yellow_score = 0.0;
             last_die = 0;
             last_die_player = PlayerColor::Red;
         }
@@ -171,9 +171,6 @@ async fn main() {
                 }
             }
         }
-
-        draw_text(&format!("{}", red_score), 16.0, 30.0, 40.0, RED);
-        draw_text(&format!("{}", yellow_score), 16.0, 70.0, 40.0, YELLOW);
 
         next_frame().await
     }
