@@ -9,7 +9,7 @@ use struggle_core::{
         stateful_get_it_over_with, worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer,
         RandomPlayer, StrugglePlayer,
     },
-    struggle::Player,
+    struggle::PlayerColor,
 };
 
 #[global_allocator]
@@ -46,8 +46,8 @@ fn wilson_score(p_hat: f64, samples: u64) -> (f64, f64) {
 }
 
 pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
-    a: (Player, A),
-    b: (Player, B),
+    a: (PlayerColor, A),
+    b: (PlayerColor, B),
     rounds: u32,
 ) {
     println!("{} ({:?}) vs {} ({:?})", a.1.name(), a.0, b.1.name(), b.0);
@@ -181,8 +181,8 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
 pub fn main() {
     compare_players_detailed(
-        (Player::Red, RandomDietPlayer),
-        (Player::Yellow, RandomEaterPlayer),
+        (PlayerColor::Red, maximize_length_expectiminimax(1)),
+        (PlayerColor::Yellow, maximize_length_expectiminimax(1)),
         500_000,
     );
 }

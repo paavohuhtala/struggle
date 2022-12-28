@@ -8,15 +8,15 @@ use struggle_core::{
         worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
         StrugglePlayer,
     },
-    struggle::Player,
+    struggle::PlayerColor,
 };
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
 pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
-    a: (Player, A),
-    b: (Player, B),
+    a: (PlayerColor, A),
+    b: (PlayerColor, B),
     rounds: u32,
 ) -> f64 {
     let a_color = a.0;
@@ -47,7 +47,7 @@ macro_rules! run_games {
             $(
                 let player_b = $player_r;
                 let name_b = player_b.name();
-                let p_a = compare_players((Player::Red, player_a.clone()), (Player::Yellow, player_b.clone()), TOTAL_GAMES);
+                let p_a = compare_players((PlayerColor::Red, player_a.clone()), (PlayerColor::Yellow, player_b.clone()), TOTAL_GAMES);
                 println!("{} vs {}: {}", name, name_b, p_a);
                 output.entry(name.to_string()).or_insert_with(HashMap::new).insert(name_b.to_string(), p_a);
 

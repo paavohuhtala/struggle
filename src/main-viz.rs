@@ -1,6 +1,6 @@
 use struggle_core::{
     players::{default_heuristic, maximize_length_expectiminimax, GameContext, StrugglePlayer},
-    struggle::{Board, Player, COLORS},
+    struggle::{Board, PlayerColor, COLORS},
 };
 
 use ::rand::prelude::*;
@@ -13,12 +13,12 @@ pub const INNER_RADIUS: f32 = 440.0;
 pub const PIECE_RADIUS: f32 = 30.0;
 pub const GOAL_SEPARATION: f32 = 70.0;
 
-pub fn player_to_color(player: Player) -> Color {
+pub fn player_to_color(player: PlayerColor) -> Color {
     match player {
-        Player::Red => RED,
-        Player::Blue => BLUE,
-        Player::Yellow => YELLOW,
-        Player::Green => GREEN,
+        PlayerColor::Red => RED,
+        PlayerColor::Blue => BLUE,
+        PlayerColor::Yellow => YELLOW,
+        PlayerColor::Green => GREEN,
     }
 }
 
@@ -34,14 +34,14 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut board = Board::new(Player::Red, Player::Yellow);
+    let mut board = Board::new(PlayerColor::Red, PlayerColor::Yellow);
     let sector = (360.0 / board.tiles.len() as f32).to_radians();
 
     let center_x = WIDTH as f32 / 2.0;
     let center_y = HEIGHT as f32 / 2.0;
 
-    let mut player_a = (Player::Red, maximize_length_expectiminimax(2));
-    let mut player_b = (Player::Yellow, maximize_length_expectiminimax(2));
+    let mut player_a = (PlayerColor::Red, maximize_length_expectiminimax(2));
+    let mut player_b = (PlayerColor::Yellow, maximize_length_expectiminimax(2));
 
     let player_a_color = player_a.0;
     let player_b_color = player_b.0;
@@ -59,7 +59,7 @@ async fn main() {
     let mut yellow_score = 0.0;
 
     let mut last_die = 0;
-    let mut last_die_player = Player::Red;
+    let mut last_die_player = PlayerColor::Red;
 
     loop {
         let time = get_time();
@@ -106,7 +106,7 @@ async fn main() {
             red_score = 0.0;
             yellow_score = 0.0;
             last_die = 0;
-            last_die_player = Player::Red;
+            last_die_player = PlayerColor::Red;
         }
 
         clear_background(BLACK);

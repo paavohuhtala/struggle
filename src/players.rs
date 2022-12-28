@@ -4,7 +4,7 @@ use ::rand::{prelude::*, rngs::SmallRng};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 
-use crate::struggle::{Board, PiecePosition, Player, ValidMove};
+use crate::struggle::{Board, PiecePosition, PlayerColor, ValidMove};
 
 pub trait StrugglePlayer: Clone + Send + Sync {
     fn name(&self) -> Cow<'static, str>;
@@ -19,8 +19,8 @@ pub trait StrugglePlayer: Clone + Send + Sync {
 }
 
 pub struct GameContext {
-    pub current_player: Player,
-    pub other_player: Player,
+    pub current_player: PlayerColor,
+    pub other_player: PlayerColor,
     pub dice: u8,
 }
 
@@ -94,12 +94,12 @@ impl StrugglePlayer for RandomDietPlayer {
     }
 }
 
-pub type HeuristicFunction = fn(board: &Board, player: Player, enemy: Player) -> f64;
+pub type HeuristicFunction = fn(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64;
 
 #[derive(Clone)]
 pub struct GameTreePlayer<F>
 where
-    F: Fn(&Board, Player, Player) -> f64,
+    F: Fn(&Board, PlayerColor, PlayerColor) -> f64,
 {
     pub heuristic: F,
     pub max_depth: u8,
@@ -107,7 +107,7 @@ where
     name: &'static str,
 }
 
-impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
+impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
     pub fn new(f: F, max_depth: u8, name: &'static str) -> Self {
         GameTreePlayer {
             heuristic: f,
@@ -119,8 +119,8 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
     fn expectiminimax(
         &self,
         board: &Board,
-        maximizing_player: Player,
-        minimizing_player: Player,
+        maximizing_player: PlayerColor,
+        minimizing_player: PlayerColor,
         maxiziming: bool,
         max_depth: u8,
         depth: u8,
@@ -189,7 +189,7 @@ impl<F: Fn(&Board, Player, Player) -> f64> GameTreePlayer<F> {
     }
 }
 
-impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
+impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> StrugglePlayer
     for GameTreePlayer<F>
 {
     fn select_move<'a>(
@@ -239,7 +239,7 @@ impl<F: Fn(&Board, Player, Player) -> f64 + Clone + Send + Sync> StrugglePlayer
     }
 }
 
-pub fn default_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
+pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
     let mut score = 0.0;
 
     match board.get_winner() {
@@ -354,7 +354,7 @@ pub fn one_at_a_time(depth: u8) -> impl StrugglePlayer {
     }
 }
 
-fn one_at_a_time_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
+fn one_at_a_time_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
     let (own_pieces, enemy_pieces) = board.get_pieces(player, enemy);
 
     let mut score = 0.0;
@@ -408,7 +408,7 @@ pub fn one_at_a_time_deluxe(max_depth: u8) -> impl StrugglePlayer {
     }
 }
 
-fn count_moves_heuristic(board: &Board, player: Player, enemy: Player) -> f64 {
+fn count_moves_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
     (1..=6)
         .map(|die| board.get_moves(die, player, enemy).len() as f64)
         .sum::<f64>()
@@ -472,7 +472,7 @@ pub fn maximize_length_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
 
 #[derive(Clone)]
 pub struct StatefulGetItOverWith {
-    supporting: Option<Player>,
+    supporting: Option<PlayerColor>,
     max_depth: u8,
 }
 

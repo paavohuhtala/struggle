@@ -1,9 +1,10 @@
+pub mod game;
 pub mod players;
 pub mod struggle;
 
 use players::{GameContext, StrugglePlayer};
 use rand::prelude::*;
-use struggle::{Board, Player};
+use struggle::{Board, PlayerColor};
 
 #[derive(Debug, Default)]
 pub struct GameStats {
@@ -13,13 +14,13 @@ pub struct GameStats {
 
 #[derive(Debug)]
 pub struct GameResult {
-    pub winner: Player,
+    pub winner: PlayerColor,
     pub stats: Option<Box<GameStats>>,
 }
 
 pub fn play_game<A, B>(
-    mut player_a: (Player, A),
-    mut player_b: (Player, B),
+    mut player_a: (PlayerColor, A),
+    mut player_b: (PlayerColor, B),
     collect_stats: bool,
 ) -> GameResult
 where
