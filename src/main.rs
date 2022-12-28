@@ -3,12 +3,8 @@ use itertools::Itertools;
 use plotters::prelude::*;
 use rayon::prelude::*;
 use struggle_core::{
-    play_game,
-    players::{
-        expectiminimax, maximize_length_expectiminimax, one_at_a_time_deluxe,
-        stateful_get_it_over_with, worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer,
-        RandomPlayer, StrugglePlayer,
-    },
+    game::{play_game, AiStrugglePlayer, StruggleGame},
+    players::{maximize_length_expectiminimax, RandomPlayer, StrugglePlayer},
     struggle::PlayerColor,
 };
 
@@ -61,16 +57,20 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         .map(|_| {
             let player_a = a.1.clone();
             let player_b = b.1.clone();
-            play_game((a.0, player_a), (b.0, player_b), true)
+
+            let player_a = AiStrugglePlayer::new(a.0, player_a);
+            let player_b = AiStrugglePlayer::new(b.0, player_b);
+
+            let mut game = StruggleGame::new(player_a, player_b, true);
+            let winner = play_game(&mut game);
+            (winner, game.into_stats().unwrap())
         })
         .collect::<Vec<_>>();
 
-    let stats = results
-        .iter()
-        .map(|r| r.stats.as_ref().unwrap().as_ref())
-        .collect_vec();
+    let total_games = results.len();
+    let (winners, stats): (Vec<_>, Vec<_>) = results.into_iter().unzip();
 
-    let turns = stats.iter().map(|s| s.turns as u32).collect_vec();
+    let turns = stats.iter().map(|stats| stats.turns as u32).collect_vec();
     let (&min_turns, &max_turns) = turns.iter().minmax().into_option().unwrap();
     let turn_counts = turns.iter().counts();
     let most_common_turn = turn_counts.values().copied().max().unwrap() as u32;
@@ -83,7 +83,7 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
                 "Game length distribution: {} vs {} (n={})",
                 a.1.name(),
                 b.1.name(),
-                results.len()
+                total_games
             ),
             ("Source Sans Pro, sans-serif", 20),
         )
@@ -104,18 +104,20 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     }))
     .unwrap();
 
-    let total_a_wins = results.iter().fold(
-        0,
-        |acc, result| {
-            if result.winner == a.0 {
-                acc + 1
-            } else {
-                acc
-            }
-        },
-    );
+    let total_a_wins: usize = winners
+        .into_par_iter()
+        .fold(
+            || 0,
+            |acc, winner| {
+                if winner == a.0 {
+                    acc + 1
+                } else {
+                    acc
+                }
+            },
+        )
+        .sum();
 
-    let total_games = results.len();
     let total_b_wins = total_games - total_a_wins;
 
     let a_b_win_ratio = total_a_wins as f64 / total_games as f64;
@@ -181,8 +183,8 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
 pub fn main() {
     compare_players_detailed(
-        (PlayerColor::Red, maximize_length_expectiminimax(1)),
-        (PlayerColor::Yellow, maximize_length_expectiminimax(1)),
+        (PlayerColor::Red, RandomPlayer),
+        (PlayerColor::Yellow, RandomPlayer),
         500_000,
     );
 }

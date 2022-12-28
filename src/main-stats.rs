@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rayon::prelude::*;
 use struggle_core::{
-    play_game,
+    game::{play_game, AiStrugglePlayer, StruggleGame},
     players::{
         expectiminimax, maximize_options, minimize_options, participation_award,
         worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
@@ -27,9 +27,13 @@ pub fn compare_players<A: StrugglePlayer, B: StrugglePlayer>(
         .map(|_| {
             let player_a = a.1.clone();
             let player_b = b.1.clone();
-            play_game((a_color, player_a), (b_color, player_b), false)
+            let player_a = AiStrugglePlayer::new(a_color, player_a);
+            let player_b = AiStrugglePlayer::new(b_color, player_b);
+            let mut game = StruggleGame::new(player_a, player_b, false);
+            let winner = play_game(&mut game);
+            winner
         })
-        .filter(|res| res.winner == a_color)
+        .filter(|winner| *winner == a_color)
         .count();
 
     games_won_by_a as f64 / rounds as f64

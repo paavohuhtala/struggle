@@ -1,5 +1,6 @@
 use struggle_core::{
-    players::{default_heuristic, maximize_length_expectiminimax, GameContext, StrugglePlayer},
+    game::{AiStrugglePlayer, RaceGame, StruggleGame, TurnResult},
+    players::maximize_length_expectiminimax,
     struggle::{Board, PlayerColor, COLORS},
 };
 
@@ -34,26 +35,19 @@ fn window_conf() -> Conf {
 
 #[macroquad::main(window_conf)]
 async fn main() {
-    let mut board = Board::new(PlayerColor::Red, PlayerColor::Yellow);
-    let sector = (360.0 / board.tiles.len() as f32).to_radians();
+    let sector = (360.0 / Board::TILES as f32).to_radians();
 
     let center_x = WIDTH as f32 / 2.0;
     let center_y = HEIGHT as f32 / 2.0;
 
-    let mut player_a = (PlayerColor::Red, maximize_length_expectiminimax(2));
-    let mut player_b = (PlayerColor::Yellow, maximize_length_expectiminimax(2));
-
-    let player_a_color = player_a.0;
-    let player_b_color = player_b.0;
-
-    let mut current_player = player_a.0;
-    let mut other_player = player_b.0;
+    let player_a = AiStrugglePlayer::new(PlayerColor::Red, maximize_length_expectiminimax(2));
+    let player_b = AiStrugglePlayer::new(PlayerColor::Yellow, maximize_length_expectiminimax(2));
 
     let mut rng = SmallRng::from_rng(::rand::thread_rng()).unwrap();
 
     let mut next_tick = 0.0;
 
-    let mut winnage = false;
+    let mut winner = None;
 
     let mut red_score = 0.0;
     let mut yellow_score = 0.0;
@@ -61,48 +55,30 @@ async fn main() {
     let mut last_die = 0;
     let mut last_die_player = PlayerColor::Red;
 
+    let mut game = StruggleGame::new(player_a.clone(), player_b.clone(), false);
+
     loop {
         let time = get_time();
 
-        if time > next_tick && !winnage {
-            let dice = rng.gen_range(1..=6);
-            last_die = dice;
-            last_die_player = current_player;
-
-            let moves = board.get_moves(dice, current_player, other_player);
-
-            let ctx = GameContext {
-                current_player,
-                other_player,
-                dice,
-            };
-
-            let mov = if current_player == player_a_color {
-                player_a.1.select_move(&ctx, &board, &moves, &mut rng)
-            } else {
-                player_b.1.select_move(&ctx, &board, &moves, &mut rng)
+        if time > next_tick && winner.is_none() {
+            match game.play_turn(&mut rng) {
+                TurnResult::PlayAgain => {}
+                TurnResult::PassTo(player) => {
+                    game.set_current_player(player);
+                }
+                TurnResult::EndGame {
+                    winner: game_winner,
+                } => {
+                    winner = Some(game_winner);
+                }
             }
-            .clone();
-
-            board.perform_move(current_player, &mov);
-
-            if board.get_winner().is_some() {
-                winnage = true;
-            }
-
-            if dice != 6 {
-                std::mem::swap(&mut current_player, &mut other_player);
-            }
-
-            red_score = default_heuristic(&board, player_a_color, player_b_color);
-            yellow_score = default_heuristic(&board, player_b_color, player_a_color);
 
             next_tick = time + 0.2;
         }
 
         if is_key_pressed(KeyCode::R) {
-            board = Board::new(player_a_color, player_b_color);
-            winnage = false;
+            game = StruggleGame::new(player_a.clone(), player_b.clone(), false);
+            winner = None;
             red_score = 0.0;
             yellow_score = 0.0;
             last_die = 0;
@@ -121,7 +97,7 @@ async fn main() {
             player_to_color(last_die_player),
         );
 
-        for (i, tile) in board.tiles.iter().enumerate() {
+        for (i, tile) in game.board().tiles.iter().enumerate() {
             let relative_rad = i as f32 * sector;
             let x = center_x + INNER_RADIUS * relative_rad.cos();
             let y = center_y + INNER_RADIUS * relative_rad.sin();
@@ -152,7 +128,7 @@ async fn main() {
                 let cos = mid.cos();
                 let sin = mid.sin();
 
-                let goals = board.goals[side as usize];
+                let goals = game.board().goals[side as usize];
 
                 // goals
                 for (i, cell) in goals.iter().enumerate() {
@@ -177,7 +153,7 @@ async fn main() {
                     draw_text(text, x, y, 30.0, BLACK);
                 }
 
-                let home_base = &board.home_bases[side];
+                let home_base = &game.board().home_bases[side];
 
                 // home base
                 for i in 0..4 {

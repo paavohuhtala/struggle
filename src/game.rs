@@ -1,16 +1,16 @@
 use arrayvec::ArrayVec;
-use rand::{prelude::SmallRng, Rng};
+use rand::{prelude::SmallRng, Rng, SeedableRng};
 
-use crate::{players, struggle};
+use crate::{players, struggle, GameStats};
 
 #[derive(Debug)]
-enum TurnResult<PlayerId> {
+pub enum TurnResult<PlayerId> {
     PlayAgain,
     PassTo(PlayerId),
     EndGame { winner: PlayerId },
 }
 
-trait RaceGame {
+pub trait RaceGame {
     type Board;
     type PlayerId;
 
@@ -55,17 +55,67 @@ trait RaceGame {
     }
 }
 
-struct AiStrugglePlayer<T: players::StrugglePlayer> {
+pub fn play_game<G: RaceGame>(game: &mut G) -> G::PlayerId {
+    let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+    loop {
+        match game.play_turn(rng) {
+            TurnResult::PlayAgain => {}
+            TurnResult::PassTo(player) => {
+                game.set_current_player(player);
+            }
+            TurnResult::EndGame { winner } => {
+                return winner;
+            }
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct AiStrugglePlayer<T: players::StrugglePlayer> {
     color: struggle::PlayerColor,
     player: T,
 }
 
-struct StruggleGame<A: players::StrugglePlayer, B: players::StrugglePlayer> {
+impl<T: players::StrugglePlayer> AiStrugglePlayer<T> {
+    pub fn new(color: struggle::PlayerColor, player: T) -> Self {
+        Self { color, player }
+    }
+
+    pub fn color(&self) -> struggle::PlayerColor {
+        self.color
+    }
+}
+
+pub struct StruggleGame<A: players::StrugglePlayer, B: players::StrugglePlayer> {
     board: struggle::Board,
     player_a: AiStrugglePlayer<A>,
     player_b: AiStrugglePlayer<B>,
 
     current_player: struggle::PlayerColor,
+
+    stats: Option<GameStats>,
+}
+
+impl<A: players::StrugglePlayer, B: players::StrugglePlayer> StruggleGame<A, B> {
+    pub fn new(
+        player_a: AiStrugglePlayer<A>,
+        player_b: AiStrugglePlayer<B>,
+        collect_stats: bool,
+    ) -> Self {
+        let board = struggle::Board::new(player_a.color, player_b.color);
+
+        Self {
+            board,
+            current_player: player_a.color,
+            player_a,
+            player_b,
+            stats: collect_stats.then(|| GameStats::default()),
+        }
+    }
+
+    pub fn into_stats(self) -> Option<GameStats> {
+        self.stats
+    }
 }
 
 impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for StruggleGame<A, B> {
@@ -76,7 +126,6 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
     type MoveVector = ArrayVec<struggle::ValidMove, 4>;
 
     type TurnContext = players::GameContext;
-
     type DiceState = u8;
 
     fn board(&self) -> &struggle::Board {
@@ -122,6 +171,17 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
         moves: &'a Self::MoveVector,
         rng: &mut SmallRng,
     ) -> &'a Self::Move {
+        if let Some(stats) = &mut self.stats {
+            let index = if self.current_player == self.player_a.color {
+                0
+            } else {
+                1
+            };
+
+            stats.turns += 1;
+            stats.move_distribution[index][moves.len() - 1] += 1;
+        }
+
         if self.current_player == self.player_a.color {
             self.player_a
                 .player

@@ -48,6 +48,13 @@ pub type MoveVec = ArrayVec<ValidMove, 4>;
 pub type PieceVec = ArrayVec<PiecePosition, 4>;
 
 impl Board {
+    pub const TILES: usize = 7 * 4;
+
+    pub const RED_START: u8 = 0;
+    pub const BLUE_START: u8 = Self::RED_START + 7;
+    pub const YELLOW_START: u8 = Self::BLUE_START + 7;
+    pub const GREEN_START: u8 = Self::YELLOW_START + 7;
+
     pub fn new(player_a: PlayerColor, player_b: PlayerColor) -> Self {
         Board {
             tiles: [None; 7 * 4],
@@ -58,13 +65,6 @@ impl Board {
             piece_cache: (PieceVec::new(), PieceVec::new()),
         }
     }
-}
-
-impl Board {
-    pub const RED_START: u8 = 0;
-    pub const BLUE_START: u8 = Self::RED_START + 7;
-    pub const YELLOW_START: u8 = Self::BLUE_START + 7;
-    pub const GREEN_START: u8 = Self::YELLOW_START + 7;
 
     pub fn get_start(player: PlayerColor) -> u8 {
         match player {
