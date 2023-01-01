@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use rayon::prelude::*;
 use struggle_core::{
-    game::play_game,
+    game::{play_game, NamedPlayer},
     games::struggle::{
         players::{
             expectiminimax, maximize_options, minimize_options, participation_award,

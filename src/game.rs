@@ -1,3 +1,5 @@
+use std::{borrow::Cow, fmt::Debug};
+
 use rand::{prelude::SmallRng, SeedableRng};
 
 #[derive(Debug)]
@@ -7,15 +9,47 @@ pub enum TurnResult<PlayerId> {
     EndGame { winner: PlayerId },
 }
 
+#[derive(Debug)]
+pub struct GameStats<const MAX_MOVES: usize> {
+    pub move_distribution: [[u16; MAX_MOVES]; 2],
+    pub turns: u16,
+}
+
+impl<const MAX_MOVES: usize> GameStats<MAX_MOVES> {
+    pub fn new() -> Self {
+        Self {
+            move_distribution: [[0; MAX_MOVES]; 2],
+            turns: 0,
+        }
+    }
+}
+
+impl<const MAX_MOVES: usize> Default for GameStats<MAX_MOVES> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+trait GenericGameStats<const MAX_MOVES: usize> {
+    fn move_distribution(&self) -> &[[u16; MAX_MOVES]; 2];
+    fn turns(&self) -> u16;
+}
+
+pub trait NamedPlayer {
+    fn name(&self) -> Cow<'static, str>;
+}
+
 pub trait RaceGame {
     type Board;
-    type PlayerId;
+    type PlayerId: Debug + Send + Sync + Clone + Eq + PartialEq;
 
     type Move;
     type MoveVector;
 
     type TurnContext;
     type DiceState: Clone;
+
+    const MAX_MOVES: usize;
 
     fn board(&self) -> &Self::Board;
     fn current_player(&self) -> Self::PlayerId;
@@ -52,6 +86,17 @@ pub trait RaceGame {
     }
 }
 
+pub trait CreateGame: RaceGame {
+    type PlayerA: NamedPlayer + Clone + Send + Sync;
+    type PlayerB: NamedPlayer + Clone + Send + Sync;
+
+    fn create_game(
+        player_a: (Self::PlayerId, Self::PlayerA),
+        player_b: (Self::PlayerId, Self::PlayerB),
+        collect_stats: bool,
+    ) -> Self;
+}
+
 pub fn play_game<G: RaceGame>(game: &mut G) -> G::PlayerId {
     let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
     loop {
@@ -65,4 +110,8 @@ pub fn play_game<G: RaceGame>(game: &mut G) -> G::PlayerId {
             }
         }
     }
+}
+
+pub trait IntoGameStats<const MAX_MOVES: usize>: RaceGame {
+    fn into_stats(self) -> Option<GameStats<MAX_MOVES>>;
 }

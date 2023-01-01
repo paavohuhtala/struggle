@@ -1,6 +1,6 @@
 use rand::Rng;
 
-use crate::game::{RaceGame, TurnResult};
+use crate::game::{CreateGame, GameStats, IntoGameStats, RaceGame, TurnResult};
 
 use self::{
     board::{ActionDie, DieResult, TwistBoard, TwistMove, TwistMoveVec},
@@ -14,10 +14,7 @@ pub mod board;
 pub mod get_moves;
 pub mod players;
 
-pub struct TwistGameStats {
-    pub move_distribution: [[u16; 25]; 2],
-    pub turns: u16,
-}
+pub type TwistGameStats = GameStats<25>;
 
 pub struct TwistGame<A: TwistPlayer, B: TwistPlayer> {
     board: TwistBoard,
@@ -27,6 +24,24 @@ pub struct TwistGame<A: TwistPlayer, B: TwistPlayer> {
     current_player: PlayerColor,
 
     stats: Option<TwistGameStats>,
+}
+
+impl<A: TwistPlayer, B: TwistPlayer> TwistGame<A, B> {
+    pub fn new(
+        player_a: AiStrugglePlayer<A>,
+        player_b: AiStrugglePlayer<B>,
+        collect_stats: bool,
+    ) -> Self {
+        let board = TwistBoard::new((player_a.color, player_b.color));
+
+        Self {
+            board,
+            current_player: player_a.color,
+            player_a,
+            player_b,
+            stats: collect_stats.then(|| TwistGameStats::default()),
+        }
+    }
 }
 
 impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
@@ -39,6 +54,8 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
     type TurnContext = players::GameContext;
 
     type DiceState = DieResult;
+
+    const MAX_MOVES: usize = 25;
 
     fn board(&self) -> &Self::Board {
         &self.board
@@ -67,7 +84,11 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
     }
 
     fn create_turn_context(&self, die: Self::DiceState) -> Self::TurnContext {
-        GameContext { die }
+        GameContext {
+            die,
+            current_player: self.current_player,
+            other_player: self.other_player(),
+        }
     }
 
     fn get_moves(&self, ctx: &Self::TurnContext) -> Self::MoveVector {
@@ -98,15 +119,51 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
 
     fn select_move<'a>(
         &mut self,
-        _ctx: &Self::TurnContext,
+        ctx: &Self::TurnContext,
         moves: &'a Self::MoveVector,
-        _rng: &mut rand::rngs::SmallRng,
+        rng: &mut rand::rngs::SmallRng,
     ) -> &'a Self::Move {
         if let Some(stats) = &mut self.stats {
+            let index = if self.current_player == self.player_a.color {
+                0
+            } else {
+                1
+            };
+
             stats.turns += 1;
-            stats.move_distribution[self.current_player as usize][moves.len() - 1] += 1;
+            stats.move_distribution[index][moves.len() - 1] += 1;
         }
 
-        todo!()
+        if self.current_player == self.player_a.color {
+            self.player_a
+                .player
+                .select_move(ctx, &self.board, moves, rng)
+        } else {
+            self.player_b
+                .player
+                .select_move(ctx, &self.board, moves, rng)
+        }
+    }
+}
+
+impl<A: TwistPlayer, B: TwistPlayer> CreateGame for TwistGame<A, B> {
+    type PlayerA = A;
+    type PlayerB = B;
+
+    fn create_game(
+        player_a: (PlayerColor, A),
+        player_b: (PlayerColor, B),
+        collect_stats: bool,
+    ) -> Self {
+        let player_a = AiStrugglePlayer::new(player_a.0, player_a.1);
+        let player_b = AiStrugglePlayer::new(player_b.0, player_b.1);
+
+        Self::new(player_a, player_b, collect_stats)
+    }
+}
+
+impl<A: TwistPlayer, B: TwistPlayer> IntoGameStats<25> for TwistGame<A, B> {
+    fn into_stats(self) -> Option<TwistGameStats> {
+        self.stats
     }
 }

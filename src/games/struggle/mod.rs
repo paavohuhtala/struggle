@@ -1,9 +1,12 @@
 use arrayvec::ArrayVec;
 use rand::{rngs::SmallRng, Rng};
 
-use crate::game::{RaceGame, TurnResult};
+use crate::game::{CreateGame, GameStats, IntoGameStats, RaceGame, TurnResult};
 
-use self::board::{Board, StruggleMove};
+use self::{
+    board::{Board, StruggleMove},
+    players::StrugglePlayer,
+};
 
 pub mod board;
 pub mod players;
@@ -35,16 +38,10 @@ pub const COLORS: [PlayerColor; 4] = [
     PlayerColor::Green,
 ];
 
-#[derive(Debug, Default)]
-pub struct GameStats {
-    pub move_distribution: [[u16; 4]; 2],
-    pub turns: u16,
-}
-
 #[derive(Clone)]
 pub struct AiStrugglePlayer<T> {
     pub color: PlayerColor,
-    player: T,
+    pub player: T,
 }
 
 impl<T> AiStrugglePlayer<T> {
@@ -57,6 +54,8 @@ impl<T> AiStrugglePlayer<T> {
     }
 }
 
+pub type StruggleGameStats = GameStats<4>;
+
 pub struct StruggleGame<A: players::StrugglePlayer, B: players::StrugglePlayer> {
     board: Board,
     player_a: AiStrugglePlayer<A>,
@@ -64,7 +63,7 @@ pub struct StruggleGame<A: players::StrugglePlayer, B: players::StrugglePlayer> 
 
     current_player: PlayerColor,
 
-    stats: Option<GameStats>,
+    stats: Option<StruggleGameStats>,
 }
 
 impl<A: players::StrugglePlayer, B: players::StrugglePlayer> StruggleGame<A, B> {
@@ -80,12 +79,8 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> StruggleGame<A, B> 
             current_player: player_a.color,
             player_a,
             player_b,
-            stats: collect_stats.then(|| GameStats::default()),
+            stats: collect_stats.then(|| StruggleGameStats::default()),
         }
-    }
-
-    pub fn into_stats(self) -> Option<GameStats> {
-        self.stats
     }
 }
 
@@ -98,6 +93,8 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
 
     type TurnContext = players::GameContext;
     type DiceState = u8;
+
+    const MAX_MOVES: usize = 4;
 
     fn board(&self) -> &Board {
         &self.board
@@ -178,5 +175,27 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
         } else {
             TurnResult::PassTo(self.other_player())
         }
+    }
+}
+
+impl<A: StrugglePlayer, B: StrugglePlayer> CreateGame for StruggleGame<A, B> {
+    type PlayerA = A;
+    type PlayerB = B;
+
+    fn create_game(
+        player_a: (PlayerColor, A),
+        player_b: (PlayerColor, B),
+        collect_stats: bool,
+    ) -> Self {
+        let player_a = AiStrugglePlayer::new(player_a.0, player_a.1);
+        let player_b = AiStrugglePlayer::new(player_b.0, player_b.1);
+
+        Self::new(player_a, player_b, collect_stats)
+    }
+}
+
+impl<A: StrugglePlayer, B: StrugglePlayer> IntoGameStats<4> for StruggleGame<A, B> {
+    fn into_stats(self) -> Option<StruggleGameStats> {
+        self.stats
     }
 }

@@ -4,14 +4,14 @@ use ::rand::{prelude::*, rngs::SmallRng};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
 
+use crate::game::NamedPlayer;
+
 use super::{
     board::{Board, PiecePosition, StruggleMove},
     PlayerColor,
 };
 
-pub trait StrugglePlayer: Clone + Send + Sync {
-    fn name(&self) -> Cow<'static, str>;
-
+pub trait StrugglePlayer: Clone + Send + Sync + NamedPlayer {
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
@@ -31,6 +31,12 @@ pub struct GameContext {
 #[derive(Clone)]
 pub struct RandomPlayer;
 
+impl NamedPlayer for RandomPlayer {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Random")
+    }
+}
+
 impl StrugglePlayer for RandomPlayer {
     fn select_move<'a>(
         &mut self,
@@ -40,10 +46,6 @@ impl StrugglePlayer for RandomPlayer {
         rng: &mut SmallRng,
     ) -> &'a StruggleMove {
         moves.choose(rng).unwrap()
-    }
-
-    fn name(&self) -> Cow<'static, str> {
-        Cow::from("Random")
     }
 }
 
@@ -66,9 +68,11 @@ impl StrugglePlayer for RandomEaterPlayer {
             None => moves.choose(rng).unwrap(),
         }
     }
+}
 
+impl NamedPlayer for RandomEaterPlayer {
     fn name(&self) -> Cow<'static, str> {
-        Cow::from("RandomEater")
+        Cow::Borrowed("RandomEater")
     }
 }
 
@@ -91,9 +95,11 @@ impl StrugglePlayer for RandomDietPlayer {
             _ => diet_compatible.choose(rng).unwrap(),
         }
     }
+}
 
+impl NamedPlayer for RandomDietPlayer {
     fn name(&self) -> Cow<'static, str> {
-        Cow::from("RandomDiet")
+        Cow::Borrowed("RandomDiet")
     }
 }
 
@@ -236,7 +242,9 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
                 .0
         }
     }
+}
 
+impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> NamedPlayer for GameTreePlayer<F> {
     fn name(&self) -> Cow<'static, str> {
         Cow::from(format!("{}({})", self.name, self.max_depth))
     }
@@ -487,10 +495,6 @@ pub fn stateful_get_it_over_with(max_depth: u8) -> impl StrugglePlayer {
 }
 
 impl StrugglePlayer for StatefulGetItOverWith {
-    fn name(&self) -> Cow<'static, str> {
-        Cow::Borrowed("GetItOverWith")
-    }
-
     fn select_move<'a>(
         &mut self,
         ctx: &GameContext,
@@ -530,6 +534,12 @@ impl StrugglePlayer for StatefulGetItOverWith {
     }
 }
 
+impl NamedPlayer for StatefulGetItOverWith {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::from("GetItOverWith")
+    }
+}
+
 #[derive(Clone)]
 pub struct DilutedPlayer<P: StrugglePlayer>(pub P, pub f64);
 
@@ -547,7 +557,9 @@ impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
             moves.choose(rng).unwrap()
         }
     }
+}
 
+impl<P: StrugglePlayer> NamedPlayer for DilutedPlayer<P> {
     fn name(&self) -> Cow<'static, str> {
         Cow::from(format!("{} {:.0}%", self.0.name(), self.1 * 100.0))
     }

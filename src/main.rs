@@ -3,17 +3,23 @@ use itertools::Itertools;
 use plotters::prelude::*;
 use rayon::prelude::*;
 use struggle_core::{
-    game::play_game,
-    games::struggle::{
-        players::{maximize_length_expectiminimax, StrugglePlayer},
-        AiStrugglePlayer, PlayerColor, StruggleGame,
+    game::{play_game, CreateGame, IntoGameStats, NamedPlayer},
+    games::{
+        struggle::{
+            players::{RandomPlayer, StrugglePlayer},
+            PlayerColor, StruggleGame,
+        },
+        twist::{
+            players::{TwistPlayer, TwistRandomPlayer},
+            TwistGame,
+        },
     },
 };
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
 
-fn print_move_distribution_graph(distribution: [u32; 4]) {
+fn print_move_distribution_graph<const MAX_MOVES: usize>(distribution: [u32; MAX_MOVES]) {
     println!("{:?}", distribution);
 
     let total = distribution.iter().sum::<u32>();
@@ -43,31 +49,28 @@ fn wilson_score(p_hat: f64, samples: u64) -> (f64, f64) {
     ((a - b) / c, (a + b) / c)
 }
 
-pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
-    a: (PlayerColor, A),
-    b: (PlayerColor, B),
+pub fn compare_players_detailed<
+    const MAX_MOVES: usize,
+    G: CreateGame + IntoGameStats<MAX_MOVES>,
+>(
+    a: (G::PlayerId, G::PlayerA),
+    b: (G::PlayerId, G::PlayerB),
     rounds: u32,
 ) {
     println!("{} ({:?}) vs {} ({:?})", a.1.name(), a.0, b.1.name(), b.0);
-
-    let drawing_area = SVGBackend::new("length_distribution.svg", (1000, 500)).into_drawing_area();
-    drawing_area.fill(&WHITE).unwrap();
 
     let results = (0..rounds)
         .into_par_iter()
         .progress_count(rounds as u64)
         .map(|_| {
-            let player_a = a.1.clone();
-            let player_b = b.1.clone();
-
-            let player_a = AiStrugglePlayer::new(a.0, player_a);
-            let player_b = AiStrugglePlayer::new(b.0, player_b);
-
-            let mut game = StruggleGame::new(player_a, player_b, true);
+            let mut game = G::create_game(a.clone(), b.clone(), true);
             let winner = play_game(&mut game);
             (winner, game.into_stats().unwrap())
         })
         .collect::<Vec<_>>();
+
+    let drawing_area = SVGBackend::new("length_distribution.svg", (1000, 500)).into_drawing_area();
+    drawing_area.fill(&WHITE).unwrap();
 
     let total_games = results.len();
     let (winners, stats): (Vec<_>, Vec<_>) = results.into_iter().unzip();
@@ -143,23 +146,23 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
         average_length, shortest_game, longest_game
     );
 
-    let mut move_distribution = [[0, 0, 0, 0]; 2];
+    let mut move_distribution = [[0; MAX_MOVES]; 2];
 
     for s in stats.iter() {
-        for i in 0..4 {
+        for i in 0..MAX_MOVES {
             move_distribution[0][i] += s.move_distribution[0][i] as u32;
             move_distribution[1][i] += s.move_distribution[1][i] as u32;
         }
     }
 
-    let choice_percentage_a = move_distribution[0][1..4]
+    let choice_percentage_a = move_distribution[0][1..MAX_MOVES]
         .iter()
         .map(|&i| i as f64)
         .sum::<f64>()
         / move_distribution[0].iter().map(|&i| i as f64).sum::<f64>()
         * 100.0;
 
-    let choice_percentage_b = move_distribution[1][1..4]
+    let choice_percentage_b = move_distribution[1][1..MAX_MOVES]
         .iter()
         .map(|&i| i as f64)
         .sum::<f64>()
@@ -183,10 +186,26 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
     );
 }
 
-pub fn main() {
-    compare_players_detailed(
-        (PlayerColor::Red, maximize_length_expectiminimax(1)),
-        (PlayerColor::Yellow, maximize_length_expectiminimax(1)),
-        500_000,
+fn compare_struggle_players(a: impl StrugglePlayer, b: impl StrugglePlayer, rounds: u32) {
+    // It is a current unfortunate limitation of associated consts / const generics that we have to provde MAX_MOVES here :(
+    compare_players_detailed::<4, StruggleGame<_, _>>(
+        (PlayerColor::Red, a),
+        (PlayerColor::Yellow, b),
+        rounds,
     );
+}
+
+fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32) {
+    // It is a current unfortunate limitation of associated consts / const generics that we have to provde MAX_MOVES here :(
+    compare_players_detailed::<25, TwistGame<_, _>>(
+        (PlayerColor::Red, a),
+        (PlayerColor::Yellow, b),
+        rounds,
+    );
+}
+
+pub fn main() {
+    compare_struggle_players(RandomPlayer, RandomPlayer, 500_000);
+
+    compare_twist_players(TwistRandomPlayer, TwistRandomPlayer, 500_000);
 }
