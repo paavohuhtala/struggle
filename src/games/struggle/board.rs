@@ -4,7 +4,7 @@ use arrayvec::ArrayVec;
 
 use super::{PlayerColor, COLORS};
 
-type BoardCell = Option<PlayerColor>;
+pub type BoardCell = Option<PlayerColor>;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum PiecePosition {
@@ -31,7 +31,7 @@ pub struct Board {
     piece_cache: (PieceVec, PieceVec),
 }
 
-pub type MoveVec = ArrayVec<ValidMove, 4>;
+pub type MoveVec = ArrayVec<StruggleMove, 4>;
 pub type PieceVec = ArrayVec<PiecePosition, 4>;
 
 impl Board {
@@ -129,10 +129,10 @@ impl Board {
         if home_base.pieces_waiting > 0 && dice == 6 {
             match self.tiles[player_start as usize] {
                 Some(other_piece) if other_piece != player => {
-                    moves.push(ValidMove::AddNewPiece { eats: true });
+                    moves.push(StruggleMove::AddNewPiece { eats: true });
                 }
                 None => {
-                    moves.push(ValidMove::AddNewPiece { eats: false });
+                    moves.push(StruggleMove::AddNewPiece { eats: false });
                 }
                 _ => {}
             }
@@ -165,7 +165,7 @@ impl Board {
                     match goal_relative_pos {
                         Some(pos) => {
                             if let Some(None) = goal.get(pos as usize) {
-                                moves.push(ValidMove::MoveToGoal {
+                                moves.push(StruggleMove::MoveToGoal {
                                     from_board: current_pos,
                                     to_goal: pos,
                                 });
@@ -173,14 +173,14 @@ impl Board {
                         }
                         None => match self.tiles[new_pos as usize] {
                             None => {
-                                moves.push(ValidMove::MovePiece {
+                                moves.push(StruggleMove::MovePiece {
                                     from: current_pos,
                                     to: new_pos,
                                     eats: false,
                                 });
                             }
                             Some(other_piece) if other_piece != player => {
-                                moves.push(ValidMove::MovePiece {
+                                moves.push(StruggleMove::MovePiece {
                                     from: current_pos,
                                     to: new_pos,
                                     eats: true,
@@ -194,7 +194,7 @@ impl Board {
                     let new_pos = i + dice;
 
                     if let Some(None) = goal.get(new_pos as usize) {
-                        moves.push(ValidMove::MoveInGoal {
+                        moves.push(StruggleMove::MoveInGoal {
                             from_goal: *i,
                             to_goal: new_pos,
                         });
@@ -204,15 +204,15 @@ impl Board {
         }
 
         if moves.is_empty() {
-            moves.push(ValidMove::SkipTurn);
+            moves.push(StruggleMove::SkipTurn);
         }
 
         moves
     }
 
-    pub fn perform_move(&mut self, player: PlayerColor, mov: &ValidMove) {
+    pub fn perform_move(&mut self, player: PlayerColor, mov: &StruggleMove) {
         match mov {
-            ValidMove::AddNewPiece { eats } => {
+            StruggleMove::AddNewPiece { eats } => {
                 let start = Self::get_start(player);
 
                 if *eats {
@@ -226,7 +226,7 @@ impl Board {
                     .remove_piece()
                     .expect("Player should have pieces left in home base");
             }
-            ValidMove::MovePiece { from, to, eats } => {
+            StruggleMove::MovePiece { from, to, eats } => {
                 if *eats {
                     let target_player = self.tiles[*to as usize]
                         .expect("expecting eating move to have piece in target");
@@ -236,19 +236,19 @@ impl Board {
                 self.tiles[*to as usize] = self.tiles[*from as usize];
                 self.tiles[*from as usize] = None;
             }
-            ValidMove::MoveToGoal {
+            StruggleMove::MoveToGoal {
                 from_board,
                 to_goal,
             } => {
                 self.goals[player as usize][*to_goal as usize] = self.tiles[*from_board as usize];
                 self.tiles[*from_board as usize] = None;
             }
-            ValidMove::MoveInGoal { from_goal, to_goal } => {
+            StruggleMove::MoveInGoal { from_goal, to_goal } => {
                 self.goals[player as usize][*to_goal as usize] =
                     self.goals[player as usize][*from_goal as usize];
                 self.goals[player as usize][*from_goal as usize] = None;
             }
-            ValidMove::SkipTurn => {}
+            StruggleMove::SkipTurn => {}
         }
 
         self.update_piece_cache();
@@ -258,9 +258,9 @@ impl Board {
         self.piece_cache = self.get_pieces_internal(self.players.0, self.players.1);
     }
 
-    pub fn with_move(&self, player: PlayerColor, mov: &ValidMove) -> Cow<'_, Self> {
+    pub fn with_move(&self, player: PlayerColor, mov: &StruggleMove) -> Cow<'_, Self> {
         match mov {
-            ValidMove::SkipTurn => Cow::Borrowed(self),
+            StruggleMove::SkipTurn => Cow::Borrowed(self),
             otherwise => {
                 let mut board = self.clone();
                 board.perform_move(player, otherwise);
@@ -300,7 +300,7 @@ pub struct HomeBase {
 }
 
 impl HomeBase {
-    fn new() -> HomeBase {
+    pub fn new() -> HomeBase {
         HomeBase { pieces_waiting: 4 }
     }
 
@@ -316,12 +316,16 @@ impl HomeBase {
     pub fn add_piece(&mut self) {
         self.pieces_waiting += 1;
     }
+
+    pub fn can_add_piece(&self) -> bool {
+        self.pieces_waiting > 0
+    }
 }
 
 type Goal = [BoardCell; 4];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum ValidMove {
+pub enum StruggleMove {
     AddNewPiece { eats: bool },
     MovePiece { from: u8, to: u8, eats: bool },
     MoveToGoal { from_board: u8, to_goal: u8 },
@@ -329,11 +333,11 @@ pub enum ValidMove {
     SkipTurn,
 }
 
-impl ValidMove {
+impl StruggleMove {
     pub fn eats(&self) -> bool {
         match self {
-            ValidMove::AddNewPiece { eats } => *eats,
-            ValidMove::MovePiece { eats, .. } => *eats,
+            StruggleMove::AddNewPiece { eats } => *eats,
+            StruggleMove::MovePiece { eats, .. } => *eats,
             _ => false,
         }
     }
@@ -353,7 +357,7 @@ mod tests {
         assert_eq!(moves.len(), 1);
         assert_eq!(
             moves[0],
-            ValidMove::MoveToGoal {
+            StruggleMove::MoveToGoal {
                 from_board: 27,
                 to_goal: 0
             }
@@ -378,7 +382,7 @@ mod tests {
         assert_eq!(moves.len(), 1);
         assert_eq!(
             moves[0],
-            ValidMove::MoveToGoal {
+            StruggleMove::MoveToGoal {
                 from_board: 26,
                 to_goal: 0
             }
@@ -403,7 +407,7 @@ mod tests {
         assert_eq!(moves.len(), 1);
         assert_eq!(
             moves[0],
-            ValidMove::MovePiece {
+            StruggleMove::MovePiece {
                 from: 27,
                 to: 0,
                 eats: false

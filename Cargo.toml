@@ -30,6 +30,8 @@ arrayvec = "0.7.2"
 csv = "1.1.6"
 indicatif = { version = "0.16.2", features = ["rayon"] }
 plotters = "0.3.1"
+tinyvec = { version = "1.6.0", features = ["alloc", "rustc_1_40"] }
+assert_unordered = "0.3.5"
 
 [profile.release]
 debug = 1

@@ -3,7 +3,7 @@ use rand::{rngs::SmallRng, Rng};
 
 use crate::game::{RaceGame, TurnResult};
 
-use self::board::{Board, ValidMove};
+use self::board::{Board, StruggleMove};
 
 pub mod board;
 pub mod players;
@@ -14,6 +14,18 @@ pub enum PlayerColor {
     Blue,
     Yellow,
     Green,
+}
+
+impl From<usize> for PlayerColor {
+    fn from(value: usize) -> Self {
+        match value {
+            0 => Self::Red,
+            1 => Self::Blue,
+            2 => Self::Yellow,
+            3 => Self::Green,
+            _ => panic!("Invalid player color"),
+        }
+    }
 }
 
 pub const COLORS: [PlayerColor; 4] = [
@@ -30,12 +42,12 @@ pub struct GameStats {
 }
 
 #[derive(Clone)]
-pub struct AiStrugglePlayer<T: players::StrugglePlayer> {
-    color: PlayerColor,
+pub struct AiStrugglePlayer<T> {
+    pub color: PlayerColor,
     player: T,
 }
 
-impl<T: players::StrugglePlayer> AiStrugglePlayer<T> {
+impl<T> AiStrugglePlayer<T> {
     pub fn new(color: PlayerColor, player: T) -> Self {
         Self { color, player }
     }
@@ -81,8 +93,8 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
     type Board = Board;
     type PlayerId = PlayerColor;
 
-    type Move = ValidMove;
-    type MoveVector = ArrayVec<ValidMove, 4>;
+    type Move = StruggleMove;
+    type MoveVector = ArrayVec<StruggleMove, 4>;
 
     type TurnContext = players::GameContext;
     type DiceState = u8;

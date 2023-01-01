@@ -5,7 +5,7 @@ use rayon::prelude::*;
 use struggle_core::{
     game::play_game,
     games::struggle::{
-        players::{RandomPlayer, StrugglePlayer},
+        players::{maximize_length_expectiminimax, StrugglePlayer},
         AiStrugglePlayer, PlayerColor, StruggleGame,
     },
 };
@@ -185,8 +185,8 @@ pub fn compare_players_detailed<A: StrugglePlayer, B: StrugglePlayer>(
 
 pub fn main() {
     compare_players_detailed(
-        (PlayerColor::Red, RandomPlayer),
-        (PlayerColor::Yellow, RandomPlayer),
+        (PlayerColor::Red, maximize_length_expectiminimax(1)),
+        (PlayerColor::Yellow, maximize_length_expectiminimax(1)),
         500_000,
     );
 }

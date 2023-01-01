@@ -5,7 +5,7 @@ use arrayvec::ArrayVec;
 use itertools::Itertools;
 
 use super::{
-    board::{Board, PiecePosition, ValidMove},
+    board::{Board, PiecePosition, StruggleMove},
     PlayerColor,
 };
 
@@ -16,9 +16,9 @@ pub trait StrugglePlayer: Clone + Send + Sync {
         &mut self,
         ctx: &GameContext,
         board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove;
+    ) -> &'a StruggleMove;
 }
 
 pub struct GameContext {
@@ -36,9 +36,9 @@ impl StrugglePlayer for RandomPlayer {
         &mut self,
         _ctx: &GameContext,
         _board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         moves.choose(rng).unwrap()
     }
 
@@ -56,9 +56,9 @@ impl StrugglePlayer for RandomEaterPlayer {
         &mut self,
         _ctx: &GameContext,
         _board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         let eating_moves = moves.iter().find(|mov| mov.eats());
 
         match eating_moves {
@@ -81,9 +81,9 @@ impl StrugglePlayer for RandomDietPlayer {
         &mut self,
         _ctx: &GameContext,
         _board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         let diet_compatible = moves.iter().filter(|mov| !mov.eats()).collect_vec();
 
         match diet_compatible.len() {
@@ -199,9 +199,9 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
         &mut self,
         ctx: &GameContext,
         board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         let scored_moves = moves
             .iter()
             .map(|mov| {
@@ -220,7 +220,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
 
                 (mov, score)
             })
-            .collect::<ArrayVec<(&ValidMove, f64), 4>>();
+            .collect::<ArrayVec<(&StruggleMove, f64), 4>>();
 
         let tied = scored_moves
             .iter()
@@ -495,9 +495,9 @@ impl StrugglePlayer for StatefulGetItOverWith {
         &mut self,
         ctx: &GameContext,
         board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         if self.supporting.is_none() {
             let own_pieces_in_goal = board.pieces_in_goal(ctx.current_player);
             let enemy_pieces_in_goal = board.pieces_in_goal(ctx.other_player);
@@ -538,9 +538,9 @@ impl<P: StrugglePlayer> StrugglePlayer for DilutedPlayer<P> {
         &mut self,
         ctx: &GameContext,
         board: &Board,
-        moves: &'a [ValidMove],
+        moves: &'a [StruggleMove],
         rng: &mut SmallRng,
-    ) -> &'a ValidMove {
+    ) -> &'a StruggleMove {
         if rng.gen::<f64>() < self.1 {
             self.0.select_move(ctx, board, moves, rng)
         } else {
