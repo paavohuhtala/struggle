@@ -363,4 +363,4 @@ impl Default for TwistMove {
 }
 
 // Store up to 4 moves inline
-pub type TwistMoveVec = TinyVec<[TwistMove; 4]>;
+pub type TwistMoveVec = TinyVec<[TwistMove; 8]>;

@@ -5,12 +5,9 @@ use rayon::prelude::*;
 use struggle_core::{
     game::{play_game, CreateGame, IntoGameStats, NamedPlayer},
     games::{
-        struggle::{
-            players::{RandomPlayer, StrugglePlayer},
-            PlayerColor, StruggleGame,
-        },
+        struggle::{players::StrugglePlayer, PlayerColor, StruggleGame},
         twist::{
-            players::{TwistPlayer, TwistRandomPlayer},
+            players::{TwistDoNothingPlayer, TwistPlayer, TwistRandomPlayer},
             TwistGame,
         },
     },
@@ -18,25 +15,6 @@ use struggle_core::{
 
 #[global_allocator]
 static ALLOC: mimalloc::MiMalloc = mimalloc::MiMalloc;
-
-fn print_move_distribution_graph<const MAX_MOVES: usize>(distribution: [u32; MAX_MOVES]) {
-    println!("{:?}", distribution);
-
-    let total = distribution.iter().sum::<u32>();
-
-    let max = distribution.iter().copied().max().unwrap();
-
-    for (i, hits) in distribution.iter().enumerate() {
-        let bar_length = (*hits as f32 / max as f32) * 50.0;
-        let bar = "#".repeat(bar_length as usize);
-        println!(
-            "{:>2}: {:<50} ({:.1}%)",
-            i + 1,
-            bar,
-            distribution[i] as f64 / total as f64 * 100.0
-        );
-    }
-}
 
 fn wilson_score(p_hat: f64, samples: u64) -> (f64, f64) {
     let z: f64 = 1.96;
@@ -56,8 +34,11 @@ pub fn compare_players_detailed<
     a: (G::PlayerId, G::PlayerA),
     b: (G::PlayerId, G::PlayerB),
     rounds: u32,
+    svg_path: &str,
 ) {
     println!("{} ({:?}) vs {} ({:?})", a.1.name(), a.0, b.1.name(), b.0);
+
+    let start_time = std::time::Instant::now();
 
     let results = (0..rounds)
         .into_par_iter()
@@ -69,8 +50,22 @@ pub fn compare_players_detailed<
         })
         .collect::<Vec<_>>();
 
-    let drawing_area = SVGBackend::new("length_distribution.svg", (1000, 500)).into_drawing_area();
+    let elapsed = start_time.elapsed();
+
+    println!(
+        "Finished {} rounds in {}.{:03}s ({} μs per round)",
+        rounds,
+        elapsed.as_secs(),
+        elapsed.subsec_millis(),
+        elapsed.as_micros() / rounds as u128
+    );
+
+    let drawing_area = SVGBackend::new(svg_path, (1500, 1500)).into_drawing_area();
     drawing_area.fill(&WHITE).unwrap();
+
+    let (upper, lower) = drawing_area.split_vertically(750);
+
+    let (lower_left, lower_right) = lower.split_horizontally(750);
 
     let total_games = results.len();
     let (winners, stats): (Vec<_>, Vec<_>) = results.into_iter().unzip();
@@ -80,7 +75,7 @@ pub fn compare_players_detailed<
     let turn_counts = turns.iter().counts();
     let most_common_turn = turn_counts.values().copied().max().unwrap() as u32;
 
-    let mut ctx = ChartBuilder::on(&drawing_area)
+    let mut ctx = ChartBuilder::on(&upper)
         .set_label_area_size(LabelAreaPosition::Left, 40)
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
         .caption(
@@ -104,7 +99,10 @@ pub fn compare_players_detailed<
         let count = *turn_counts.get(&i).unwrap_or(&0);
         let x0 = SegmentValue::Exact(i);
         let x1 = SegmentValue::Exact(i + 1);
-        let bar = Rectangle::new([(x0, 0), (x1, count as u32)], GREEN.filled());
+        let bar = Rectangle::new(
+            [(x0, 0), (x1, count as u32)],
+            RGBColor(68, 63, 212).filled(),
+        );
         bar
     }))
     .unwrap();
@@ -155,6 +153,9 @@ pub fn compare_players_detailed<
         }
     }
 
+    draw_move_distribution_histogram(&move_distribution[0], lower_left, "A", &a.1.name());
+    draw_move_distribution_histogram(&move_distribution[1], lower_right, "B", &b.1.name());
+
     let choice_percentage_a = move_distribution[0][1..MAX_MOVES]
         .iter()
         .map(|&i| i as f64)
@@ -169,29 +170,68 @@ pub fn compare_players_detailed<
         / move_distribution[1].iter().map(|&i| i as f64).sum::<f64>()
         * 100.0;
 
-    println!("move count distribution:");
-
-    println!("{}", a.1.name());
-    print_move_distribution_graph(move_distribution[0]);
     println!(
-        "{:.1}% of turns had more than 1 option",
+        "{}: {:.1}% of turns had more than 1 option",
+        a.1.name(),
         choice_percentage_a
     );
 
-    println!("{}", b.1.name());
-    print_move_distribution_graph(move_distribution[1]);
     println!(
-        "{:.1}% of turns had more than 1 option",
+        "{}: {:.1}% of turns had more than 1 option",
+        b.1.name(),
         choice_percentage_b
     );
 }
 
+fn draw_move_distribution_histogram<const MAX_MOVES: usize>(
+    distribution: &[u32; MAX_MOVES],
+    drawing_area: DrawingArea<SVGBackend, plotters::coord::Shift>,
+    player_id: &'static str,
+    player_name: &str,
+) {
+    let total_moves = distribution.iter().copied().sum::<u32>();
+    let most_common_number_of_moves = distribution.iter().copied().max().unwrap();
+
+    let mut chart = ChartBuilder::on(&drawing_area)
+        .set_label_area_size(LabelAreaPosition::Left, 40)
+        .set_label_area_size(LabelAreaPosition::Bottom, 40)
+        .margin(4)
+        .caption(
+            format!("Player {} ({}) move distribution", player_name, player_id,),
+            ("Source Sans Pro, sans-serif", 20),
+        )
+        .build_cartesian_2d(
+            (0..MAX_MOVES).into_segmented(),
+            0..((most_common_number_of_moves as f32 * 1.05) as u32),
+        )
+        .unwrap();
+
+    chart
+        .configure_mesh()
+        .y_label_formatter(&|coord| format!("{:.1}%", (*coord as f32 / total_moves as f32) * 100.0))
+        .draw()
+        .unwrap();
+
+    chart
+        .draw_series((0..MAX_MOVES).map(|i| {
+            let count = distribution[i];
+            let x0 = SegmentValue::Exact(i);
+            let x1 = SegmentValue::Exact(i + 1);
+            let mut bar = Rectangle::new([(x0, 0), (x1, count as u32)], MAGENTA.filled());
+            bar.set_margin(0, 0, 1, 1);
+            bar
+        }))
+        .unwrap();
+}
+
+#[allow(dead_code)]
 fn compare_struggle_players(a: impl StrugglePlayer, b: impl StrugglePlayer, rounds: u32) {
     // It is a current unfortunate limitation of associated consts / const generics that we have to provde MAX_MOVES here :(
     compare_players_detailed::<4, StruggleGame<_, _>>(
         (PlayerColor::Red, a),
         (PlayerColor::Yellow, b),
         rounds,
+        "out/struggle.svg",
     );
 }
 
@@ -201,11 +241,13 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32) 
         (PlayerColor::Red, a),
         (PlayerColor::Yellow, b),
         rounds,
+        "out/twist_random.svg",
     );
 }
 
 pub fn main() {
-    compare_struggle_players(RandomPlayer, RandomPlayer, 500_000);
+    // compare_struggle_players(RandomPlayer, RandomPlayer, 100_000);
+    std::fs::create_dir_all("out").unwrap();
 
-    compare_twist_players(TwistRandomPlayer, TwistRandomPlayer, 500_000);
+    compare_twist_players(TwistRandomPlayer, TwistDoNothingPlayer, 100_000);
 }

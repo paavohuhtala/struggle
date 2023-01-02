@@ -43,3 +43,25 @@ impl TwistPlayer for TwistRandomPlayer {
         moves.choose(rng).unwrap()
     }
 }
+
+#[derive(Clone)]
+pub struct TwistDoNothingPlayer;
+
+impl NamedPlayer for TwistDoNothingPlayer {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("Do Nothing")
+    }
+}
+
+impl TwistPlayer for TwistDoNothingPlayer {
+    fn select_move<'a>(
+        &mut self,
+        _ctx: &GameContext,
+        _board: &TwistBoard,
+        _moves: &'a [TwistMove],
+        _rng: &mut SmallRng,
+    ) -> &'a TwistMove {
+        let default_move = TwistMove::default();
+        _moves.iter().find(|m| m == &&default_move).unwrap()
+    }
+}
