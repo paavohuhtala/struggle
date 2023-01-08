@@ -44,17 +44,12 @@ fn create_move_to_pos(
     }
 }
 
-pub fn get_twist_moves(
-    board: &TwistBoard,
-    dice: DieResult,
-    player: PlayerColor,
-    enemy: PlayerColor,
-) -> TwistMoveVec {
+pub fn get_twist_moves(board: &TwistBoard, dice: DieResult, player: PlayerColor) -> TwistMoveVec {
     let mut number_die_moves = <ArrayVec<NumberDieMove, 5>>::new_const();
     let mut action_die_moves = <ArrayVec<ActionDieMove, 5>>::new_const();
 
     let home_base = &board.home_bases[player as usize];
-    let (player_pieces, _) = board.get_pieces(player, enemy);
+    let (player_pieces, _) = board.get_pieces(player);
     let player_start = TwistBoard::STARTS[player as usize];
 
     let pieces_on_board = player_pieces
@@ -171,6 +166,7 @@ mod get_moves_tests {
     const P2: PlayerColor = PlayerColor::Yellow;
 
     const P1_GOAL_ENTRANCE: u8 = TwistBoard::get_goal_entrance(TwistRotation::Initial, P1);
+    const P2_GOAL_ENTRANCE: u8 = TwistBoard::get_goal_entrance(TwistRotation::Initial, P2);
 
     #[test]
     fn test_add_new_piece() {
@@ -183,7 +179,6 @@ mod get_moves_tests {
                 action: ActionDie::DoNothing,
             },
             P1,
-            P2,
         );
         let moves = moves.into_vec();
 
@@ -222,7 +217,6 @@ mod get_moves_tests {
                 action: ActionDie::DoNothing,
             },
             P1,
-            P2,
         )
         .into_vec();
 
@@ -262,7 +256,6 @@ mod get_moves_tests {
                 action: ActionDie::DoNothing,
             },
             P1,
-            P2,
         )
         .into_vec();
 
@@ -296,7 +289,6 @@ mod get_moves_tests {
                 action: ActionDie::DoNothing,
             },
             P2,
-            P1,
         )
         .into_vec();
 
@@ -322,15 +314,18 @@ mod get_moves_tests {
     }
 
     fn get_approach_goal_state(
+        player: PlayerColor,
+        enemy: PlayerColor,
         distance: u8,
         die: u8,
         rotation: TwistRotation,
     ) -> (TwistBoard, Vec<TwistMove>) {
-        let goal_entrance = TwistBoard::get_goal_entrance(rotation, P1);
+        let goal_entrance = TwistBoard::get_goal_entrance(rotation, player);
 
-        let mut board = TwistBoard::new((P1, P2));
+        let mut board = TwistBoard::new((player, enemy));
         board.update(|board| {
-            board.tiles[(goal_entrance - distance) as usize] = Some(P1);
+            board.tiles[(goal_entrance - distance) as usize] = Some(player);
+            board.home_bases[player as usize].pieces_waiting = 3;
             board.rotation = rotation;
         });
 
@@ -340,8 +335,7 @@ mod get_moves_tests {
                 number: die,
                 action: ActionDie::DoNothing,
             },
-            P1,
-            P2,
+            player,
         )
         .into_vec();
 
@@ -349,8 +343,8 @@ mod get_moves_tests {
     }
 
     #[test]
-    fn approach_goal_1() {
-        let (mut board, moves) = get_approach_goal_state(1, 1, TwistRotation::Initial);
+    fn approach_goal_red_1() {
+        let (mut board, moves) = get_approach_goal_state(P1, P2, 1, 1, TwistRotation::Initial);
 
         let expected_moves = vec![
             TwistMove(
@@ -373,8 +367,32 @@ mod get_moves_tests {
     }
 
     #[test]
-    fn enter_goal_1() {
-        let (mut board, moves) = get_approach_goal_state(0, 1, TwistRotation::Initial);
+    fn approach_goal_yellow_1() {
+        let (mut board, moves) = get_approach_goal_state(P2, P1, 1, 1, TwistRotation::Initial);
+
+        let expected_moves = vec![
+            TwistMove(
+                NumberDieMove::MovePiece {
+                    from: MoveFrom::Board(P2_GOAL_ENTRANCE - 1),
+                    to: P2_GOAL_ENTRANCE,
+                    eats: false,
+                },
+                ActionDieMove::DoNothing,
+            ),
+            TwistMove::default(),
+        ];
+
+        assert_eq_unordered_sort!(&moves, &expected_moves);
+
+        board.perform_move(P2, &moves[0]);
+
+        assert_eq!(board.tiles[P2_GOAL_ENTRANCE as usize], Some(P2));
+        assert_eq!(board.tiles[(P2_GOAL_ENTRANCE - 1) as usize], None);
+    }
+
+    #[test]
+    fn enter_goal_red_1() {
+        let (mut board, moves) = get_approach_goal_state(P1, P2, 0, 1, TwistRotation::Initial);
 
         let expected_moves = vec![
             TwistMove(
@@ -396,8 +414,8 @@ mod get_moves_tests {
     }
 
     #[test]
-    fn enter_goal_6() {
-        let (mut board, moves) = get_approach_goal_state(0, 6, TwistRotation::Initial);
+    fn enter_goal_red_6() {
+        let (mut board, moves) = get_approach_goal_state(P1, P2, 0, 6, TwistRotation::Initial);
 
         let expected_moves = vec![
             TwistMove(
@@ -427,8 +445,39 @@ mod get_moves_tests {
     }
 
     #[test]
-    fn enter_goal_1_rotated() {
-        let (mut board, moves) = get_approach_goal_state(1, 4, TwistRotation::Ccw180);
+    fn enter_goal_yellow_6() {
+        let (mut board, moves) = get_approach_goal_state(P2, P1, 0, 6, TwistRotation::Initial);
+
+        let expected_moves = vec![
+            TwistMove(
+                NumberDieMove::MovePiece {
+                    from: MoveFrom::Home,
+                    to: TwistBoard::YELLOW_START,
+                    eats: false,
+                },
+                ActionDieMove::DoNothing,
+            ),
+            TwistMove(
+                NumberDieMove::MoveToGoal {
+                    from_board: (P2_GOAL_ENTRANCE),
+                    to_goal: 2,
+                },
+                ActionDieMove::DoNothing,
+            ),
+            TwistMove::default(),
+        ];
+
+        assert_eq_unordered_sort!(&moves, &expected_moves);
+
+        board.perform_move(P2, &moves[1]);
+
+        assert_eq!(board.tiles[P2_GOAL_ENTRANCE as usize], None);
+        assert_eq!(&board.goals[P2 as usize], &[None, None, Some(P2)]);
+    }
+
+    #[test]
+    fn enter_goal_red_1_rotated() {
+        let (mut board, moves) = get_approach_goal_state(P1, P2, 1, 4, TwistRotation::Ccw180);
 
         // When board is rotated 180 degrees, red's goal entrance is in the same position as yellow's in the initial rotation
         let yellow_entrance =
@@ -468,7 +517,6 @@ mod get_moves_tests {
                 action: ActionDie::RotateBoard,
             },
             P1,
-            P2,
         )
         .into_vec();
 
@@ -511,7 +559,6 @@ mod get_moves_tests {
                 action: ActionDie::SpinSection,
             },
             P1,
-            P2,
         )
         .into_vec();
 
@@ -549,7 +596,6 @@ mod get_moves_tests {
                 action: ActionDie::SpinSection,
             },
             P1,
-            P2,
         )
         .into_vec();
 

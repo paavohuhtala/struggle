@@ -1,6 +1,6 @@
 use std::{borrow::Cow, fmt::Debug};
 
-use rand::{prelude::SmallRng, SeedableRng};
+use rand::{prelude::SmallRng, Rng, SeedableRng};
 
 #[derive(Debug)]
 pub enum TurnResult<PlayerId> {
@@ -99,6 +99,12 @@ pub trait CreateGame: RaceGame {
 
 pub fn play_game<G: RaceGame>(game: &mut G) -> G::PlayerId {
     let rng = &mut SmallRng::from_rng(rand::thread_rng()).unwrap();
+
+    // Randomly select who starts
+    if rng.gen() {
+        game.set_current_player(game.other_player());
+    }
+
     loop {
         match game.play_turn(rng).1 {
             TurnResult::PlayAgain => {}

@@ -1,4 +1,4 @@
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 
 use crate::game::{CreateGame, GameStats, IntoGameStats, RaceGame, TurnResult};
 
@@ -92,12 +92,7 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
     }
 
     fn get_moves(&self, ctx: &Self::TurnContext) -> Self::MoveVector {
-        get_twist_moves(
-            &self.board,
-            ctx.die.clone(),
-            self.current_player,
-            self.other_player(),
-        )
+        get_twist_moves(&self.board, ctx.die.clone(), self.current_player)
     }
 
     fn apply_move(
@@ -106,14 +101,13 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
         mov: &Self::Move,
     ) -> crate::game::TurnResult<Self::PlayerId> {
         self.board.perform_move(self.current_player, mov);
+
         if let Some(winner) = self.board.get_winner() {
             TurnResult::EndGame { winner }
+        } else if ctx.die.number == 6 {
+            TurnResult::PlayAgain
         } else {
-            if ctx.die.number == 6 {
-                TurnResult::PlayAgain
-            } else {
-                TurnResult::PassTo(self.other_player())
-            }
+            TurnResult::PassTo(self.other_player())
         }
     }
 
@@ -143,6 +137,21 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
                 .player
                 .select_move(ctx, &self.board, moves, rng)
         }
+    }
+
+    fn play_turn(
+        &mut self,
+        rng: &mut rand::rngs::SmallRng,
+    ) -> (Self::DiceState, TurnResult<Self::PlayerId>) {
+        let dice = Self::throw_dice(rng);
+        let ctx = self.create_turn_context(dice.clone());
+
+        let mut moves = self.get_moves(&ctx);
+        moves.shuffle(rng);
+
+        let mov = self.select_move(&ctx, &moves, rng);
+
+        (dice, self.apply_move(&ctx, mov))
     }
 }
 

@@ -58,6 +58,7 @@ impl SpinSection {
 
 pub type TwistPieceVec = ArrayVec<PiecePosition, 4>;
 
+#[derive(Clone)]
 pub struct TwistBoard {
     pub tiles: [BoardCell; TwistBoard::TILES],
     pub goals: [TwistGoal; 4],
@@ -278,11 +279,7 @@ impl TwistBoard {
         self.piece_cache = self.get_pieces_internal(self.players.0, self.players.1);
     }
 
-    pub fn get_pieces(
-        &self,
-        player: PlayerColor,
-        _enemy: PlayerColor,
-    ) -> (&TwistPieceVec, &TwistPieceVec) {
+    pub fn get_pieces(&self, player: PlayerColor) -> (&TwistPieceVec, &TwistPieceVec) {
         if player == self.players.0 {
             (&self.piece_cache.0, &self.piece_cache.1)
         } else {
@@ -309,11 +306,12 @@ impl TwistBoard {
     }
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ActionDie {
+    #[default]
+    DoNothing,
     SpinSection,
     RotateBoard,
-    DoNothing,
 }
 
 impl ActionDie {
@@ -327,7 +325,7 @@ impl ActionDie {
     }
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone, Default)]
 pub struct DieResult {
     pub number: u8,
     pub action: ActionDie,
@@ -341,16 +339,16 @@ pub enum MoveFrom {
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum NumberDieMove {
+    DoNothing,
     MovePiece { from: MoveFrom, to: u8, eats: bool },
     MoveToGoal { from_board: u8, to_goal: u8 },
-    DoNothing,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
 pub enum ActionDieMove {
+    DoNothing,
     SpinSection(SpinSection),
     RotateBoard,
-    DoNothing,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -364,3 +362,95 @@ impl Default for TwistMove {
 
 // Store up to 4 moves inline
 pub type TwistMoveVec = TinyVec<[TwistMove; 8]>;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const P1: PlayerColor = PlayerColor::Red;
+    const P2: PlayerColor = PlayerColor::Yellow;
+
+    #[test]
+    fn get_winner_goal_filled() {
+        let mut board = TwistBoard::new((P1, P2));
+
+        board.update(|board| {
+            board.goals[0][0] = Some(P1);
+            board.goals[0][1] = Some(P1);
+            board.goals[0][2] = Some(P1);
+        });
+
+        // Winning requires all goals AND the goal entrance to be filled
+        assert_eq!(board.get_winner(), None);
+    }
+
+    #[test]
+    fn get_winner_goal_entrance_filled() {
+        let mut board = TwistBoard::new((P1, P2));
+
+        board.update(|board| {
+            board.goals[0][0] = Some(P1);
+            board.goals[0][1] = Some(P1);
+            board.goals[0][2] = Some(P1);
+            board.tiles[TwistBoard::get_goal_entrance(TwistRotation::Initial, P1) as usize] =
+                Some(P1);
+        });
+
+        assert_eq!(board.get_winner(), Some(P1));
+    }
+
+    #[test]
+    fn get_winner_goal_entrance_filled_yellow() {
+        let mut board = TwistBoard::new((P1, P2));
+
+        board.update(|board| {
+            board.goals[2][0] = Some(P2);
+            board.goals[2][1] = Some(P2);
+            board.goals[2][2] = Some(P2);
+            board.tiles[TwistBoard::get_goal_entrance(TwistRotation::Initial, P2) as usize] =
+                Some(P2);
+        });
+
+        assert_eq!(board.get_winner(), Some(P2));
+    }
+
+    #[test]
+    fn get_winner_goal_entrance_filled_other_player() {
+        let mut board = TwistBoard::new((P1, P2));
+
+        board.update(|board| {
+            board.goals[0][0] = Some(P1);
+            board.goals[0][1] = Some(P1);
+            board.goals[0][2] = Some(P1);
+
+            board.tiles[TwistBoard::get_goal_entrance(TwistRotation::Initial, P1) as usize] =
+                Some(P2);
+        });
+
+        assert_eq!(board.get_winner(), None);
+    }
+
+    #[test]
+    fn get_winner_rotate() {
+        let mut board = TwistBoard::new((P1, P2));
+
+        board.update(|board| {
+            board.rotation = TwistRotation::Ccw90;
+
+            board.goals[0][0] = Some(P1);
+            board.goals[0][1] = Some(P1);
+            board.goals[0][2] = Some(P1);
+
+            board.tiles[TwistBoard::get_goal_entrance(TwistRotation::Initial, P1) as usize] =
+                Some(P1);
+        });
+
+        assert_eq!(board.get_winner(), None);
+
+        board.update(|board| {
+            board.rotation = TwistRotation::Initial;
+        });
+
+        assert_eq!(board.get_winner(), Some(PlayerColor::Red));
+    }
+}

@@ -7,7 +7,11 @@ use struggle_core::{
     games::{
         struggle::{players::StrugglePlayer, PlayerColor, StruggleGame},
         twist::{
-            players::{TwistDoNothingPlayer, TwistPlayer, TwistRandomPlayer},
+            players::{
+                TwistDoSomethingPlayer, TwistPlayer, TwistRandomPlayer, TwistScoreBoardPlayer,
+                TwistScoreBoardPlayerMaximizeLength, TwistScoreBoardPlayerWorst,
+                TwistScoreMovePlayer,
+            },
             TwistGame,
         },
     },
@@ -235,19 +239,60 @@ fn compare_struggle_players(a: impl StrugglePlayer, b: impl StrugglePlayer, roun
     );
 }
 
-fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32) {
+fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, svg_path: &str) {
     // It is a current unfortunate limitation of associated consts / const generics that we have to provde MAX_MOVES here :(
     compare_players_detailed::<25, TwistGame<_, _>>(
         (PlayerColor::Red, a),
         (PlayerColor::Yellow, b),
         rounds,
-        "out/twist_random.svg",
+        svg_path,
     );
 }
 
 pub fn main() {
-    // compare_struggle_players(RandomPlayer, RandomPlayer, 100_000);
     std::fs::create_dir_all("out").unwrap();
 
-    compare_twist_players(TwistRandomPlayer, TwistDoNothingPlayer, 100_000);
+    //compare_struggle_players(expectiminimax(1), expectiminimax(1), 200_000);
+
+    compare_twist_players(
+        TwistScoreBoardPlayerMaximizeLength,
+        TwistDoSomethingPlayer,
+        200_000,
+        "maximize_length_vs_something.svg",
+    );
+
+    /*compare_twist_players(
+        TwistDoSomethingPlayer,
+        TwistRandomPlayer,
+        200_000,
+        "out/something_vs_random.svg",
+    );
+
+    compare_twist_players(
+        TwistScoreMovePlayer,
+        TwistRandomPlayer,
+        200_000,
+        "out/score_move_vs_random.svg",
+    );
+
+    compare_twist_players(
+        TwistScoreBoardPlayer,
+        TwistRandomPlayer,
+        200_000,
+        "out/score_board_vs_random.svg",
+    );
+
+    compare_twist_players(
+        TwistScoreBoardPlayer,
+        TwistScoreMovePlayer,
+        200_000,
+        "out/score_board_vs_score_move.svg",
+    );
+
+    compare_twist_players(
+        TwistScoreBoardPlayer,
+        TwistScoreBoardPlayerWorst,
+        200_000,
+        "out/score_board_vs_score_move.svg",
+    );*/
 }

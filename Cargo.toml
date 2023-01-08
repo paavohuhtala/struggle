@@ -16,6 +16,11 @@ path = "src/main.rs"
 name = "struggle-viz"
 path = "src/main-viz.rs"
 
+
+[[bin]]
+name = "twist-viz"
+path = "src/main-viz-twist.rs"
+
 [[bin]]
 name = "struggle-stats"
 path = "src/main-stats.rs"
