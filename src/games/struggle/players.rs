@@ -3,6 +3,7 @@ use std::borrow::Cow;
 use ::rand::{prelude::*, rngs::SmallRng};
 use arrayvec::ArrayVec;
 use itertools::Itertools;
+use ordered_float::OrderedFloat;
 
 use crate::game::NamedPlayer;
 
@@ -100,6 +101,90 @@ impl StrugglePlayer for RandomDietPlayer {
 impl NamedPlayer for RandomDietPlayer {
     fn name(&self) -> Cow<'static, str> {
         Cow::Borrowed("RandomDiet")
+    }
+}
+
+fn score_board(rng: &mut SmallRng, mov: &StruggleMove) -> OrderedFloat<f64> {
+    let score = match mov {
+        StruggleMove::AddNewPiece { eats } => {
+            if *eats {
+                150.0
+            } else {
+                50.0
+            }
+        }
+        StruggleMove::MovePiece {
+            from: _,
+            to: _,
+            eats,
+        } => {
+            if *eats {
+                100.0
+            } else {
+                1.0
+            }
+        }
+        StruggleMove::MoveToGoal {
+            from_board: _,
+            to_goal: _,
+        } => 10.0,
+        StruggleMove::MoveInGoal {
+            from_goal: _,
+            to_goal: _,
+        } => 1.0,
+        StruggleMove::SkipTurn => 0.0,
+    };
+    OrderedFloat(score + rng.gen::<f64>())
+}
+
+// Selects the best move using a simple heuristic
+// The board state is not inspected, only the move type
+#[derive(Clone)]
+pub struct ScoreMovePlayer;
+
+impl StrugglePlayer for ScoreMovePlayer {
+    fn select_move<'a>(
+        &mut self,
+        _ctx: &GameContext,
+        _board: &Board,
+        moves: &'a [StruggleMove],
+        rng: &mut SmallRng,
+    ) -> &'a StruggleMove {
+        moves
+            .iter()
+            .max_by_key(|mov| score_board(rng, mov))
+            .unwrap()
+    }
+}
+
+impl NamedPlayer for ScoreMovePlayer {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("ScoreMove")
+    }
+}
+
+// Selects the worst move using the same heuristic as ScoreMovePlayer, but negated
+#[derive(Clone)]
+pub struct WorstScoreMovePlayer;
+
+impl StrugglePlayer for WorstScoreMovePlayer {
+    fn select_move<'a>(
+        &mut self,
+        _ctx: &GameContext,
+        _board: &Board,
+        moves: &'a [StruggleMove],
+        rng: &mut SmallRng,
+    ) -> &'a StruggleMove {
+        moves
+            .iter()
+            .min_by_key(|mov| score_board(rng, mov))
+            .unwrap()
+    }
+}
+
+impl NamedPlayer for WorstScoreMovePlayer {
+    fn name(&self) -> Cow<'static, str> {
+        Cow::Borrowed("WorstScoreMove")
     }
 }
 

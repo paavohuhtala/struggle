@@ -5,7 +5,13 @@ use rayon::prelude::*;
 use struggle_core::{
     game::{play_game, CreateGame, IntoGameStats, NamedPlayer},
     games::{
-        struggle::{players::StrugglePlayer, PlayerColor, StruggleGame},
+        struggle::{
+            players::{
+                expectiminimax, RandomDietPlayer, RandomEaterPlayer, RandomPlayer, ScoreMovePlayer,
+                StrugglePlayer, WorstScoreMovePlayer,
+            },
+            PlayerColor, StruggleGame,
+        },
         twist::{
             players::{
                 TwistDoSomethingPlayer, TwistPlayer, TwistRandomPlayer, TwistScoreBoardPlayer,
@@ -46,6 +52,7 @@ pub fn compare_players_detailed<
 
     let results = (0..rounds)
         .into_par_iter()
+        .with_min_len(1000)
         .progress_count(rounds as u64)
         .map(|_| {
             let mut game = G::create_game(a.clone(), b.clone(), true);
@@ -201,7 +208,7 @@ fn draw_move_distribution_histogram<const MAX_MOVES: usize>(
         .set_label_area_size(LabelAreaPosition::Bottom, 40)
         .margin(4)
         .caption(
-            format!("Player {} ({}) move distribution", player_name, player_id,),
+            format!("Player {} ({}) number of choices", player_name, player_id,),
             ("Source Sans Pro, sans-serif", 20),
         )
         .build_cartesian_2d(
@@ -252,14 +259,18 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
+    compare_struggle_players(ScoreMovePlayer, ScoreMovePlayer, 1_000_000);
+    compare_struggle_players(ScoreMovePlayer, WorstScoreMovePlayer, 1_000_000);
+    compare_struggle_players(WorstScoreMovePlayer, RandomPlayer, 1_000_000);
+
     //compare_struggle_players(expectiminimax(1), expectiminimax(1), 200_000);
 
-    compare_twist_players(
+    /*compare_twist_players(
         TwistScoreBoardPlayerMaximizeLength,
         TwistDoSomethingPlayer,
         200_000,
         "maximize_length_vs_something.svg",
-    );
+    );*/
 
     /*compare_twist_players(
         TwistDoSomethingPlayer,

@@ -28,16 +28,17 @@ path = "src/main-stats.rs"
 [dependencies]
 macroquad = "0.3.13"
 rand = { version = "*", features = ["small_rng"] }
-rayon = "1.5.1"
+rayon = "1"
 itertools = "0.10.3"
 mimalloc = { version = "*", default-features = false }
 arrayvec = "0.7.2"
 csv = "1.1.6"
-indicatif = { version = "0.16.2", features = ["rayon"] }
+indicatif = { version = "0.17", features = ["rayon"] }
 plotters = "0.3.1"
 tinyvec = { version = "1.6.0", features = ["alloc", "rustc_1_40"] }
 assert_unordered = "0.3.5"
+ordered-float = "4.6.0"
 
 [profile.release]
 debug = 1
-lto = true
+#lto = true
