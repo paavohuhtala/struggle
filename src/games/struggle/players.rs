@@ -194,8 +194,10 @@ where
     name: &'static str,
 }
 
-const INFO_LOGGING: bool = true;
+const INFO_LOGGING: bool = false;
 const VERBOSE_LOGGING: bool = false;
+
+const WIN_SCORE: f64 = 1e10;
 
 impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
     pub fn new(f: F, max_depth: u8, name: &'static str) -> Self {
@@ -247,7 +249,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                     let board = board.with_move(maximizing_player, mov);
 
                     let (score, guaranteed_win) = match board.get_winner() {
-                        Some(player) if player == maximizing_player => (1e10, true),
+                        Some(player) if player == maximizing_player => (WIN_SCORE, true),
                         Some(_) => {
                             panic!("This should never happen: minimizing player won after maximizing player's move")
                         }
@@ -308,7 +310,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                     let board = board.with_move(minimizing_player, mov);
 
                     let (score, guaranteed_loss) = match board.get_winner() {
-                        Some(player) if player == minimizing_player => (-1e10, true),
+                        Some(player) if player == minimizing_player => (-WIN_SCORE, true),
                         Some(_) => {
                             panic!("This should never happen: maximizing player won after minimizing player's move")
                         }
@@ -419,46 +421,47 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> NamedPlayer for GameTreePla
     }
 }
 
-pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
-    let mut score = 0.0;
-
-    match board.get_winner() {
-        Some(winner) if winner == player => {
-            return 1e10;
-        }
-        Some(_) => {
-            return -1e10;
-        }
-        None => {}
-    }
-
+fn heuristic_evaluate_side(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
     let (own_pieces, enemy_pieces) = board.get_pieces(player, enemy);
 
     let my_home = Board::get_start(player);
     let enemy_home = Board::get_start(enemy);
+    let my_pieces_waiting = board.home_bases[player as usize].pieces_waiting;
+    let enemy_pieces_waiting = board.home_bases[enemy as usize].pieces_waiting;
 
-    const BASE_PIECE_SCORE: f64 = 500.0;
+    const BASE_PIECE_SCORE: f64 = 550.0;
     const ENEMY_HOME_PENALTY: f64 = 100.0;
-    const ADVANCE_PIECE_MULTIPLIER: f64 = 500.0;
+    const OWN_HOME_PENALTY: f64 = 100.0;
+    const ADVANCE_PIECE_MULTIPLIER: f64 = 200.0;
     const AT_EATING_DISTANCE_BONUS: f64 = 100.0;
-    const BASE_PIECE_IN_GOAL_SCORE: f64 = 10000.0;
+    const BASE_PIECE_IN_GOAL_SCORE: f64 = 1000.0;
     const ADVANCE_PIECE_IN_GOAL_MULTIPLIER: f64 = 10.0;
-    const RELATIVE_ADVANCEMENT_POWER: f64 = 1.2;
+    const RELATIVE_ADVANCEMENT_POWER: f64 = 1.1;
+    const CAN_ENTER_GOAL_BONUS: f64 = 20.0;
+
+    let mut score = 0.0;
 
     for piece in own_pieces {
         match piece {
             PiecePosition::Board(i) => {
-                let distance_to_goal = board.distance_to_goal(player, *i);
-                let relative_distance = 1.0 - distance_to_goal as f64 / 28.0;
+                score += BASE_PIECE_SCORE;
 
-                // discourage moving to enemy home
-                if *i == enemy_home {
-                    score += BASE_PIECE_SCORE - ENEMY_HOME_PENALTY;
-                } else {
-                    // Encourage moving pieces that are already close to the goal further
-                    score += BASE_PIECE_SCORE
-                        + relative_distance.powf(RELATIVE_ADVANCEMENT_POWER)
-                            * ADVANCE_PIECE_MULTIPLIER;
+                let distance_to_goal = board.distance_to_goal_entrance(player, *i);
+                let relative_advancement = 1.0 - distance_to_goal as f64 / 28.0;
+
+                // Encourage moving pieces that are already close to the goal further
+                score += relative_advancement.powf(RELATIVE_ADVANCEMENT_POWER)
+                    * ADVANCE_PIECE_MULTIPLIER;
+
+                // Penalize for being in the enemy home, because it's risky (unless there are no pieces waiting)
+                if *i == enemy_home && enemy_pieces_waiting > 0 {
+                    score -= ENEMY_HOME_PENALTY;
+                }
+
+                // Give a small penalty for being in your own home (if there are still pieces waiting)
+                // because it blocks mobilizing other pieces
+                if *i == my_home && my_pieces_waiting > 0 {
+                    score -= OWN_HOME_PENALTY;
                 }
 
                 for enemy_i in enemy_pieces
@@ -469,8 +472,20 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
                     let distance_to_enemy = board.clockwise_distance(*i, enemy_i);
 
                     // Small bonus for being within eating distance
-                    if (1..=6).contains(&distance_to_enemy) {
+                    if distance_to_enemy >= 1 && distance_to_enemy <= 6 {
                         score += AT_EATING_DISTANCE_BONUS;
+                    }
+                }
+
+                // If the piece can enter a goal slot with a roll of 1-6, give a bonus for each slot
+                for goal_position in 0..4u8 {
+                    let is_free = board.goals[player as usize][goal_position as usize].is_none();
+                    if !is_free {
+                        continue;
+                    }
+                    let distance = board.distance_to_goal_slot(player, *i, goal_position);
+                    if distance >= 1 && distance <= 6 {
+                        score += CAN_ENTER_GOAL_BONUS;
                     }
                 }
             }
@@ -481,40 +496,23 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
         }
     }
 
-    const BASE_ENEMY_PIECE_PENALTY: f64 = 10000.0;
-    const ENEMY_IN_MY_HOME_BONUS: f64 = 100.0;
-    const ENEMY_AT_EATING_DISTANCE_PENALTY: f64 = 100.0;
-    const ENEMY_IN_GOAL_PENALTY: f64 = 10000.0;
+    score
+}
 
-    for piece in enemy_pieces {
-        match piece {
-            PiecePosition::Board(i) => {
-                if *i == my_home {
-                    score -= BASE_ENEMY_PIECE_PENALTY + ENEMY_IN_MY_HOME_BONUS;
-                } else {
-                    score -= BASE_ENEMY_PIECE_PENALTY;
-                }
-
-                for own_i in own_pieces
-                    .iter()
-                    .copied()
-                    .filter_map(PiecePosition::as_board_index)
-                {
-                    let distance_to_own = board.clockwise_distance(*i, own_i);
-
-                    // Penalty for being within eating distance
-                    if (1..=6).contains(&distance_to_own) {
-                        score -= ENEMY_AT_EATING_DISTANCE_PENALTY;
-                    }
-                }
-            }
-            PiecePosition::Goal(_) => {
-                score -= ENEMY_IN_GOAL_PENALTY;
-            }
+pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
+    match board.get_winner() {
+        Some(winner) if winner == player => {
+            return WIN_SCORE;
         }
+        Some(_) => {
+            return -WIN_SCORE;
+        }
+        None => {}
     }
 
-    score
+    let my_score = heuristic_evaluate_side(board, player, enemy);
+    let enemy_score = heuristic_evaluate_side(board, enemy, player);
+    my_score - enemy_score
 }
 
 pub fn expectiminimax(depth: u8) -> impl StrugglePlayer {
@@ -642,7 +640,7 @@ fn maximize_length_heuristic(board: &Board) -> f64 {
         for piece in pieces.iter() {
             match piece {
                 PiecePosition::Board(pos) => {
-                    let distance_to_goal = board.distance_to_goal(*player, *pos);
+                    let distance_to_goal = board.distance_to_goal_entrance(*player, *pos);
                     let relative_distance = 1.0 - distance_to_goal as f64 / 28.0;
 
                     score -= relative_distance * 50.0;

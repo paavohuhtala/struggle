@@ -277,13 +277,21 @@ impl Board {
         }
     }
 
-    pub fn distance_to_goal(&self, player: PlayerColor, pos: u8) -> u8 {
+    /// Calculates to distance to the last slot on the board before the goal for a piece at a given board position.
+    pub fn distance_to_goal_entrance(&self, player: PlayerColor, pos: u8) -> u8 {
         let goal = match player {
             PlayerColor::Red => 27,
             _ => Self::get_start(player) - 1,
         };
 
         self.clockwise_distance(pos, goal)
+    }
+
+    /// Computes the distance to a particular goal slot (0-3) for a piece at a given board position.
+    pub fn distance_to_goal_slot(&self, player: PlayerColor, board_pos: u8, goal_pos: u8) -> u8 {
+        assert!(goal_pos < 4, "goal_pos must be in range 0-3");
+        let distance_to_goal = self.distance_to_goal_entrance(player, board_pos);
+        distance_to_goal + goal_pos + 1
     }
 
     pub fn pieces_in_goal(&self, player: PlayerColor) -> u8 {
@@ -423,19 +431,19 @@ mod tests {
     #[test]
     fn yellow_distance_to_goal() {
         let board = Board::new(PlayerColor::Red, PlayerColor::Yellow);
-        assert_eq!(board.distance_to_goal(PlayerColor::Yellow, 0), 13);
-        assert_eq!(board.distance_to_goal(PlayerColor::Yellow, 27), 14);
-        assert_eq!(board.distance_to_goal(PlayerColor::Yellow, 13), 0);
-        assert_eq!(board.distance_to_goal(PlayerColor::Yellow, 14), 27);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Yellow, 0), 13);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Yellow, 27), 14);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Yellow, 13), 0);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Yellow, 14), 27);
     }
 
     #[test]
     fn red_distance_to_goal() {
         let board = Board::new(PlayerColor::Red, PlayerColor::Yellow);
-        assert_eq!(board.distance_to_goal(PlayerColor::Red, 0), 27);
-        assert_eq!(board.distance_to_goal(PlayerColor::Red, 1), 26);
-        assert_eq!(board.distance_to_goal(PlayerColor::Red, 27), 0);
-        assert_eq!(board.distance_to_goal(PlayerColor::Red, 26), 1);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Red, 0), 27);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Red, 1), 26);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Red, 27), 0);
+        assert_eq!(board.distance_to_goal_entrance(PlayerColor::Red, 26), 1);
     }
 
     #[test]

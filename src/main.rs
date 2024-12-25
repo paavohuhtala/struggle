@@ -6,20 +6,10 @@ use struggle_core::{
     game::{play_game, CreateGame, IntoGameStats, NamedPlayer},
     games::{
         struggle::{
-            players::{
-                expectiminimax, worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer,
-                RandomPlayer, ScoreMovePlayer, StrugglePlayer, WorstScoreMovePlayer,
-            },
+            players::{expectiminimax, RandomPlayer, StrugglePlayer, WorstScoreMovePlayer},
             PlayerColor, StruggleGame,
         },
-        twist::{
-            players::{
-                TwistDoSomethingPlayer, TwistPlayer, TwistRandomPlayer, TwistScoreBoardPlayer,
-                TwistScoreBoardPlayerMaximizeLength, TwistScoreBoardPlayerWorst,
-                TwistScoreMovePlayer,
-            },
-            TwistGame,
-        },
+        twist::{players::TwistPlayer, TwistGame},
     },
 };
 
@@ -158,7 +148,7 @@ pub fn compare_players_detailed<
 
     let confidence_interval = wilson_score(a_b_win_ratio, total_games as u64);
     println!(
-        "p(a_wins) = {:.2} (p95 [{:.4}, {:.4}])",
+        "p(a_wins) = {:.3} (p95 [{:.4}, {:.4}])",
         a_b_win_ratio, confidence_interval.0, confidence_interval.1
     );
 
@@ -261,6 +251,7 @@ fn compare_struggle_players(a: impl StrugglePlayer, b: impl StrugglePlayer, roun
     );
 }
 
+#[allow(dead_code)]
 fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, svg_path: &str) {
     // It is a current unfortunate limitation of associated consts / const generics that we have to provde MAX_MOVES here :(
     compare_players_detailed::<25, TwistGame<_, _>>(
@@ -274,10 +265,8 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(0), RandomPlayer, 100_000);
-    compare_struggle_players(expectiminimax(1), RandomPlayer, 100_000);
-    compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
-    compare_struggle_players(expectiminimax(4), RandomPlayer, 10_00);
+    compare_struggle_players(expectiminimax(1), expectiminimax(2), 100000);
+    //compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 
     /*compare_struggle_players(expectiminimax(0), expectiminimax(0), 10_000);
