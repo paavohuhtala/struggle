@@ -234,27 +234,35 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 moves.sort_by_key(|mov| OrderedFloat(-score_move(rng, mov)));
 
                 let mut max_score = f64::NEG_INFINITY;
-
                 let mut best_move = moves.first().unwrap();
 
                 for mov in &moves {
-                    let new_board = board.with_move(maximizing_player, mov);
+                    let board = board.with_move(maximizing_player, mov);
 
-                    let score = self.expectiminimax(
-                        &new_board,
-                        if dice_roll == 6 {
-                            maximizing_player
-                        } else {
-                            minimizing_player
-                        },
-                        maximizing_player,
-                        minimizing_player,
-                        max_depth,
-                        depth + 1,
-                        alpha,
-                        beta,
-                        rng,
-                    );
+                    let (score, guaranteed_win) = match board.get_winner() {
+                        Some(player) if player == maximizing_player => (1e10, true),
+                        Some(_) => {
+                            panic!("This should never happen: minimizing player won after maximizing player's move")
+                        }
+                        _ => (
+                            self.expectiminimax(
+                                &board,
+                                if dice_roll == 6 {
+                                    maximizing_player
+                                } else {
+                                    minimizing_player
+                                },
+                                maximizing_player,
+                                minimizing_player,
+                                max_depth,
+                                depth + 1,
+                                alpha,
+                                beta,
+                                rng,
+                            ),
+                            false,
+                        ),
+                    };
 
                     if score > max_score {
                         best_move = mov;
@@ -262,6 +270,11 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
 
                     max_score = max_score.max(score);
                     alpha = alpha.max(score);
+
+                    // The maximizing can guarantee a win with this move, no need to look further
+                    if guaranteed_win {
+                        break;
+                    }
 
                     // Alpha-beta pruning: minimizing player will never allow this move
                     if max_score >= beta {
@@ -286,24 +299,38 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 for mov in &moves {
                     let new_board = board.with_move(minimizing_player, mov);
 
-                    let score = self.expectiminimax(
-                        &new_board,
-                        if dice_roll == 6 {
-                            minimizing_player
-                        } else {
-                            maximizing_player
-                        },
-                        maximizing_player,
-                        minimizing_player,
-                        max_depth,
-                        depth + 1,
-                        alpha,
-                        beta,
-                        rng,
-                    );
+                    let (score, guaranteed_loss) = match new_board.get_winner() {
+                        Some(player) if player == minimizing_player => (-1e10, true),
+                        Some(_) => {
+                            panic!("This should never happen: maximizing player won after minimizing player's move")
+                        }
+                        None => (
+                            self.expectiminimax(
+                                &new_board,
+                                if dice_roll == 6 {
+                                    minimizing_player
+                                } else {
+                                    maximizing_player
+                                },
+                                maximizing_player,
+                                minimizing_player,
+                                max_depth,
+                                depth + 1,
+                                alpha,
+                                beta,
+                                rng,
+                            ),
+                            false,
+                        ),
+                    };
 
                     min_score = min_score.min(score);
                     beta = beta.min(score);
+
+                    // The minimizing player can guarantee a loss with this move, no need to look further
+                    if guaranteed_loss {
+                        break;
+                    }
 
                     // Alpha-beta pruning: maximizing player will never allow this move
                     if min_score <= alpha {
