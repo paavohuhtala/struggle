@@ -1,7 +1,6 @@
 use std::borrow::Cow;
 
 use ::rand::{prelude::*, rngs::SmallRng};
-use arrayvec::ArrayVec;
 use itertools::Itertools;
 use ordered_float::OrderedFloat;
 
@@ -104,7 +103,7 @@ impl NamedPlayer for RandomDietPlayer {
     }
 }
 
-fn score_board(rng: &mut SmallRng, mov: &StruggleMove) -> OrderedFloat<f64> {
+fn score_move(rng: &mut SmallRng, mov: &StruggleMove) -> OrderedFloat<f64> {
     let score = match mov {
         StruggleMove::AddNewPiece { eats } => {
             if *eats {
@@ -150,10 +149,7 @@ impl StrugglePlayer for ScoreMovePlayer {
         moves: &'a [StruggleMove],
         rng: &mut SmallRng,
     ) -> &'a StruggleMove {
-        moves
-            .iter()
-            .max_by_key(|mov| score_board(rng, mov))
-            .unwrap()
+        moves.iter().max_by_key(|mov| score_move(rng, mov)).unwrap()
     }
 }
 
@@ -175,10 +171,7 @@ impl StrugglePlayer for WorstScoreMovePlayer {
         moves: &'a [StruggleMove],
         rng: &mut SmallRng,
     ) -> &'a StruggleMove {
-        moves
-            .iter()
-            .min_by_key(|mov| score_board(rng, mov))
-            .unwrap()
+        moves.iter().min_by_key(|mov| score_move(rng, mov)).unwrap()
     }
 }
 
@@ -201,6 +194,8 @@ where
     name: &'static str,
 }
 
+const VERBOSE_LOGGING: bool = false;
+
 impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
     pub fn new(f: F, max_depth: u8, name: &'static str) -> Self {
         GameTreePlayer {
@@ -213,73 +208,116 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
     fn expectiminimax(
         &self,
         board: &Board,
+        current_player: PlayerColor,
         maximizing_player: PlayerColor,
         minimizing_player: PlayerColor,
-        maxiziming: bool,
         max_depth: u8,
         depth: u8,
+        // Alpha: minimum guaranteed score for the maximizing player
+        alpha: f64,
+        // Beta: maximum guaranteed score for the minimizing player
+        beta: f64,
+        rng: &mut SmallRng,
     ) -> f64 {
         if depth == max_depth {
             return (self.heuristic)(board, maximizing_player, minimizing_player);
         }
 
-        if maxiziming {
-            let mut expected_value = 0.0;
+        let mut expected_value = 0.0;
 
-            for dice_roll in 1..=6 {
-                let moves = board.get_moves(dice_roll, maximizing_player, minimizing_player);
+        for dice_roll in 1..=6 {
+            let mut alpha = alpha;
+            let mut beta = beta;
 
-                let mut max_score = std::f64::NEG_INFINITY;
+            let score = if current_player == maximizing_player {
+                let mut moves = board.get_moves(dice_roll, maximizing_player, minimizing_player);
+                moves.sort_by_key(|mov| OrderedFloat(-score_move(rng, mov)));
+
+                let mut max_score = f64::NEG_INFINITY;
+
+                let mut best_move = moves.first().unwrap();
 
                 for mov in &moves {
                     let new_board = board.with_move(maximizing_player, mov);
 
                     let score = self.expectiminimax(
                         &new_board,
+                        if dice_roll == 6 {
+                            maximizing_player
+                        } else {
+                            minimizing_player
+                        },
                         maximizing_player,
                         minimizing_player,
-                        // this should take 6 into account, but that made things worse
-                        false,
                         max_depth,
                         depth + 1,
+                        alpha,
+                        beta,
+                        rng,
                     );
 
+                    if score > max_score {
+                        best_move = mov;
+                    }
+
                     max_score = max_score.max(score);
+                    alpha = alpha.max(score);
+
+                    // Alpha-beta pruning: minimizing player will never allow this move
+                    if max_score >= beta {
+                        break;
+                    }
                 }
 
-                expected_value += max_score / 6.0;
-            }
+                if VERBOSE_LOGGING {
+                    println!(
+                        "At depth {}, maximizing player chose move {:?}",
+                        depth, best_move
+                    );
+                }
 
-            expected_value
-        } else {
-            let mut expected_value = 0.0;
+                max_score
+            } else {
+                let mut moves = board.get_moves(dice_roll, minimizing_player, maximizing_player);
+                moves.sort_by_key(|mov| OrderedFloat(-score_move(rng, mov)));
 
-            for dice_roll in 1..=6 {
-                let moves = board.get_moves(dice_roll, minimizing_player, maximizing_player);
-
-                let mut min_score = std::f64::INFINITY;
+                let mut min_score = f64::INFINITY;
 
                 for mov in &moves {
                     let new_board = board.with_move(minimizing_player, mov);
 
                     let score = self.expectiminimax(
                         &new_board,
+                        if dice_roll == 6 {
+                            minimizing_player
+                        } else {
+                            maximizing_player
+                        },
                         maximizing_player,
                         minimizing_player,
-                        // this should take 6 into account, but that made things worse
-                        true,
                         max_depth,
                         depth + 1,
+                        alpha,
+                        beta,
+                        rng,
                     );
 
                     min_score = min_score.min(score);
+                    beta = beta.min(score);
+
+                    // Alpha-beta pruning: maximizing player will never allow this move
+                    if min_score <= alpha {
+                        break;
+                    }
                 }
 
-                expected_value += min_score / 6.0;
-            }
+                min_score
+            };
 
-            expected_value
+            expected_value += score;
         }
+
+        expected_value / 6.0
     }
 }
 
@@ -293,39 +331,44 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
         moves: &'a [StruggleMove],
         rng: &mut SmallRng,
     ) -> &'a StruggleMove {
-        let scored_moves = moves
+        if moves.len() == 1 {
+            return moves.first().unwrap();
+        }
+
+        if VERBOSE_LOGGING {
+            println!("{} is selecting a move...", self.name());
+        }
+
+        moves
             .iter()
-            .map(|mov| {
+            .max_by_key(|mov| {
                 let new_board = board.with_move(ctx.current_player, mov);
+
+                let next_turn = match ctx.dice {
+                    6 => ctx.current_player,
+                    _ => ctx.other_player,
+                };
 
                 let score = self.expectiminimax(
                     &new_board,
+                    next_turn,
                     ctx.current_player,
                     ctx.other_player,
-                    // This should technically be ctx.dice == 6,
-                    // but for some reason that is making the AI perform worse :(
-                    false,
                     self.max_depth,
                     0,
-                );
+                    f64::NEG_INFINITY,
+                    f64::INFINITY,
+                    rng,
+                ) * if mov.eats() { 2.0 } else { 1.0 };
 
-                (mov, score)
+                if VERBOSE_LOGGING {
+                    println!("Move {:?} scored: {}", mov, score);
+                }
+
+                // Add a bit of random noise to break ties
+                OrderedFloat(score + rng.gen::<f64>())
             })
-            .collect::<ArrayVec<(&StruggleMove, f64), 4>>();
-
-        let tied = scored_moves
-            .iter()
-            .all(|(_, score)| score == &scored_moves[0].1);
-
-        if tied {
-            return moves.choose(rng).unwrap();
-        } else {
-            scored_moves
-                .iter()
-                .max_by(|(_, score1), (_, score2)| score1.partial_cmp(score2).unwrap())
-                .unwrap()
-                .0
-        }
+            .unwrap()
     }
 }
 
@@ -340,10 +383,10 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
 
     match board.get_winner() {
         Some(winner) if winner == player => {
-            return 10000000.0;
+            return 1e10;
         }
         Some(_) => {
-            return -10000000.0;
+            return -1e10;
         }
         None => {}
     }
@@ -353,6 +396,14 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
     let my_home = Board::get_start(player);
     let enemy_home = Board::get_start(enemy);
 
+    const BASE_PIECE_SCORE: f64 = 500.0;
+    const ENEMY_HOME_PENALTY: f64 = 100.0;
+    const ADVANCE_PIECE_MULTIPLIER: f64 = 500.0;
+    const AT_EATING_DISTANCE_BONUS: f64 = 100.0;
+    const BASE_PIECE_IN_GOAL_SCORE: f64 = 10000.0;
+    const ADVANCE_PIECE_IN_GOAL_MULTIPLIER: f64 = 10.0;
+    const RELATIVE_ADVANCEMENT_POWER: f64 = 1.2;
+
     for piece in own_pieces {
         match piece {
             PiecePosition::Board(i) => {
@@ -361,11 +412,12 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
 
                 // discourage moving to enemy home
                 if *i == enemy_home {
-                    score += 50.0;
-                } else if distance_to_goal <= 1 {
-                    score += 175.0;
+                    score += BASE_PIECE_SCORE - ENEMY_HOME_PENALTY;
                 } else {
-                    score += 100.0 + relative_distance;
+                    // Encourage moving pieces that are already close to the goal further
+                    score += BASE_PIECE_SCORE
+                        + relative_distance.powf(RELATIVE_ADVANCEMENT_POWER)
+                            * ADVANCE_PIECE_MULTIPLIER;
                 }
 
                 for enemy_i in enemy_pieces
@@ -377,23 +429,29 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
 
                     // Small bonus for being within eating distance
                     if (1..=6).contains(&distance_to_enemy) {
-                        score += 40.0;
+                        score += AT_EATING_DISTANCE_BONUS;
                     }
                 }
             }
             PiecePosition::Goal(n) => {
-                score += 10000.0 + (*n as f64 / 3.0) * 10.0;
+                score +=
+                    BASE_PIECE_IN_GOAL_SCORE + (*n as f64 / 3.0) * ADVANCE_PIECE_IN_GOAL_MULTIPLIER;
             }
         }
     }
+
+    const BASE_ENEMY_PIECE_PENALTY: f64 = 10000.0;
+    const ENEMY_IN_MY_HOME_BONUS: f64 = 100.0;
+    const ENEMY_AT_EATING_DISTANCE_PENALTY: f64 = 100.0;
+    const ENEMY_IN_GOAL_PENALTY: f64 = 10000.0;
 
     for piece in enemy_pieces {
         match piece {
             PiecePosition::Board(i) => {
                 if *i == my_home {
-                    score -= 150.0;
+                    score -= BASE_ENEMY_PIECE_PENALTY + ENEMY_IN_MY_HOME_BONUS;
                 } else {
-                    score -= 300.0;
+                    score -= BASE_ENEMY_PIECE_PENALTY;
                 }
 
                 for own_i in own_pieces
@@ -405,12 +463,12 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
 
                     // Penalty for being within eating distance
                     if (1..=6).contains(&distance_to_own) {
-                        score -= 25.0;
+                        score -= ENEMY_AT_EATING_DISTANCE_PENALTY;
                     }
                 }
             }
             PiecePosition::Goal(_) => {
-                score -= 15000.0;
+                score -= ENEMY_IN_GOAL_PENALTY;
             }
         }
     }

@@ -56,6 +56,7 @@ impl<T> AiStrugglePlayer<T> {
 
 pub type StruggleGameStats = GameStats<4>;
 
+#[derive(Clone)]
 pub struct StruggleGame<A: players::StrugglePlayer, B: players::StrugglePlayer> {
     board: Board,
     player_a: AiStrugglePlayer<A>,
@@ -116,7 +117,7 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
         self.current_player = player;
     }
 
-    fn throw_dice(rng: &mut SmallRng) -> u8 {
+    fn throw_dice(&self, rng: &mut SmallRng) -> u8 {
         rng.gen_range(1..=6)
     }
 
@@ -146,7 +147,6 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
                 1
             };
 
-            stats.turns += 1;
             stats.move_distribution[index][moves.len() - 1] += 1;
         }
 
@@ -166,6 +166,23 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
         ctx: &Self::TurnContext,
         mov: &Self::Move,
     ) -> TurnResult<Self::PlayerId> {
+        if let Some(stats) = &mut self.stats {
+            let add_eats = match mov {
+                StruggleMove::AddNewPiece { eats: true, .. }
+                | StruggleMove::MovePiece { eats: true, .. } => 1,
+                _ => 0,
+            };
+
+            let index = if self.current_player == self.player_a.color {
+                0
+            } else {
+                1
+            };
+
+            stats.pieces_eaten_by[index] += add_eats;
+            stats.turns += 1;
+        }
+
         self.board.perform_move(ctx.current_player, mov);
 
         if let Some(winner) = self.board.get_winner() {

@@ -7,8 +7,8 @@ use struggle_core::{
     games::{
         struggle::{
             players::{
-                expectiminimax, RandomDietPlayer, RandomEaterPlayer, RandomPlayer, ScoreMovePlayer,
-                StrugglePlayer, WorstScoreMovePlayer,
+                expectiminimax, worst_expectiminimax, RandomDietPlayer, RandomEaterPlayer,
+                RandomPlayer, ScoreMovePlayer, StrugglePlayer, WorstScoreMovePlayer,
             },
             PlayerColor, StruggleGame,
         },
@@ -85,6 +85,21 @@ pub fn compare_players_detailed<
     let (&min_turns, &max_turns) = turns.iter().minmax().into_option().unwrap();
     let turn_counts = turns.iter().counts();
     let most_common_turn = turn_counts.values().copied().max().unwrap() as u32;
+
+    let total_eats = stats
+        .iter()
+        .map(|s| s.pieces_eaten_by)
+        .fold([0, 0], |acc, eats| [acc[0] + eats[0], acc[1] + eats[1]]);
+
+    let average_eats_per_player = [
+        total_eats[0] as f64 / total_games as f64,
+        total_eats[1] as f64 / total_games as f64,
+    ];
+
+    println!(
+        "average pieces eaten: {} vs {}",
+        average_eats_per_player[0], average_eats_per_player[1]
+    );
 
     let mut ctx = ChartBuilder::on(&upper)
         .set_label_area_size(LabelAreaPosition::Left, 40)
@@ -259,9 +274,15 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(ScoreMovePlayer, ScoreMovePlayer, 1_000_000);
-    compare_struggle_players(ScoreMovePlayer, WorstScoreMovePlayer, 1_000_000);
-    compare_struggle_players(WorstScoreMovePlayer, RandomPlayer, 1_000_000);
+    compare_struggle_players(expectiminimax(0), worst_expectiminimax(0), 100_000);
+    compare_struggle_players(expectiminimax(0), worst_expectiminimax(1), 100_000);
+    compare_struggle_players(expectiminimax(0), worst_expectiminimax(2), 100_000);
+    //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
+
+    /*compare_struggle_players(expectiminimax(0), expectiminimax(0), 10_000);
+    compare_struggle_players(expectiminimax(0), expectiminimax(1), 10_000);
+    compare_struggle_players(expectiminimax(0), expectiminimax(2), 10_000);
+    compare_struggle_players(expectiminimax(0), expectiminimax(3), 10_000);*/
 
     //compare_struggle_players(expectiminimax(1), expectiminimax(1), 200_000);
 

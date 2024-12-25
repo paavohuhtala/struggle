@@ -26,7 +26,7 @@ name = "struggle-stats"
 path = "src/main-stats.rs"
 
 [dependencies]
-macroquad = "0.3.13"
+macroquad = "0.4"
 rand = { version = "*", features = ["small_rng"] }
 rayon = "1"
 itertools = "0.10.3"

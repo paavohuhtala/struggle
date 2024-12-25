@@ -77,7 +77,7 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
         self.current_player = player;
     }
 
-    fn throw_dice(rng: &mut rand::rngs::SmallRng) -> Self::DiceState {
+    fn throw_dice(&self, rng: &mut rand::rngs::SmallRng) -> Self::DiceState {
         let number = rng.gen_range(1..=6);
         let action = ActionDie::get_random(rng);
         DieResult { number, action }
@@ -143,7 +143,7 @@ impl<A: TwistPlayer, B: TwistPlayer> RaceGame for TwistGame<A, B> {
         &mut self,
         rng: &mut rand::rngs::SmallRng,
     ) -> (Self::DiceState, TurnResult<Self::PlayerId>) {
-        let dice = Self::throw_dice(rng);
+        let dice = self.throw_dice(rng);
         let ctx = self.create_turn_context(dice.clone());
 
         let mut moves = self.get_moves(&ctx);

@@ -3,8 +3,9 @@ use macroquad::prelude::*;
 use struggle_core::{
     game::{RaceGame, TurnResult},
     games::struggle::{
-        board::Board, players::maximize_length_expectiminimax, AiStrugglePlayer, PlayerColor,
-        StruggleGame, COLORS,
+        board::Board,
+        players::{default_heuristic, expectiminimax, GameContext, RandomPlayer, StrugglePlayer},
+        AiStrugglePlayer, PlayerColor, StruggleGame, COLORS,
     },
 };
 
@@ -41,8 +42,13 @@ async fn main() {
     let center_x = WIDTH as f32 / 2.0;
     let center_y = HEIGHT as f32 / 2.0;
 
-    let player_a = AiStrugglePlayer::new(PlayerColor::Red, maximize_length_expectiminimax(2));
-    let player_b = AiStrugglePlayer::new(PlayerColor::Yellow, maximize_length_expectiminimax(2));
+    let player_a = AiStrugglePlayer::new(PlayerColor::Red, expectiminimax(0));
+    let mut player_a0 = expectiminimax(0);
+    let mut player_a1 = expectiminimax(1);
+    let mut player_a2 = expectiminimax(2);
+    let mut player_a3 = expectiminimax(3);
+
+    let player_b = AiStrugglePlayer::new(PlayerColor::Yellow, RandomPlayer);
 
     let mut rng = SmallRng::from_rng(::rand::thread_rng()).unwrap();
 
@@ -55,12 +61,52 @@ async fn main() {
 
     let mut game = StruggleGame::new(player_a.clone(), player_b.clone(), false);
 
+    let mut can_advance_tick = true;
+
     loop {
         let time = get_time();
 
-        if time > next_tick && winner.is_none() {
-            let (dice, result) = game.play_turn(&mut rng);
+        if !can_advance_tick {
+            if is_key_pressed(KeyCode::Space) {
+                can_advance_tick = true;
+            }
+        }
 
+        if can_advance_tick && time > next_tick && winner.is_none() {
+            can_advance_tick = false;
+
+            let dice = game.throw_dice(&mut rng);
+
+            if game.current_player() == PlayerColor::Red {
+                let ctx = GameContext {
+                    dice,
+                    current_player: PlayerColor::Red,
+                    other_player: PlayerColor::Yellow,
+                };
+                let moves = game.get_moves(&ctx);
+
+                println!("Possible moves: {:?}", moves);
+
+                println!("Depth 0 moves evaluation...");
+                let depth_0_move = player_a0.select_move(&ctx, game.board(), &moves, &mut rng);
+                println!("Depth 1 moves evaluation...");
+                let depth_1_move = player_a1.select_move(&ctx, game.board(), &moves, &mut rng);
+                println!("Depth 2 moves evaluation...");
+                let depth_2_move = player_a2.select_move(&ctx, game.board(), &moves, &mut rng);
+                println!("Depth 3 moves evaluation...");
+                let depth_3_move = player_a3.select_move(&ctx, game.board(), &moves, &mut rng);
+
+                println!("Depth 0: {:?}", depth_0_move);
+                println!("Depth 1: {:?}", depth_1_move);
+                println!("Depth 2: {:?}", depth_2_move);
+                println!("Depth 3: {:?}", depth_3_move);
+
+                let score = default_heuristic(game.board(), PlayerColor::Red, PlayerColor::Yellow);
+                println!("Default heuristic by player A: {}", score);
+                println!();
+            }
+
+            let result = game.play_turn_with_die(dice, &mut rng);
             last_die = dice;
             last_die_player = game.current_player();
 
