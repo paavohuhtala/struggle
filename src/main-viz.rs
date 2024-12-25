@@ -47,6 +47,7 @@ async fn main() {
     let mut player_a1 = expectiminimax(1);
     let mut player_a2 = expectiminimax(2);
     let mut player_a3 = expectiminimax(3);
+    let mut player_a4 = expectiminimax(4);
 
     let player_b = AiStrugglePlayer::new(PlayerColor::Yellow, RandomPlayer);
 
@@ -95,11 +96,14 @@ async fn main() {
                 let depth_2_move = player_a2.select_move(&ctx, game.board(), &moves, &mut rng);
                 println!("Depth 3 moves evaluation...");
                 let depth_3_move = player_a3.select_move(&ctx, game.board(), &moves, &mut rng);
+                println!("Depth 4 moves evaluation...");
+                let depth_4_move = player_a4.select_move(&ctx, game.board(), &moves, &mut rng);
 
                 println!("Depth 0: {:?}", depth_0_move);
                 println!("Depth 1: {:?}", depth_1_move);
                 println!("Depth 2: {:?}", depth_2_move);
                 println!("Depth 3: {:?}", depth_3_move);
+                println!("Depth 4: {:?}", depth_4_move);
 
                 let score = default_heuristic(game.board(), PlayerColor::Red, PlayerColor::Yellow);
                 println!("Default heuristic by player A: {}", score);

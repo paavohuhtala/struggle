@@ -194,6 +194,7 @@ where
     name: &'static str,
 }
 
+const INFO_LOGGING: bool = true;
 const VERBOSE_LOGGING: bool = false;
 
 impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
@@ -218,6 +219,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
         // Beta: maximum guaranteed score for the minimizing player
         beta: f64,
         rng: &mut SmallRng,
+        probability: f64,
     ) -> f64 {
         if depth == max_depth {
             return (self.heuristic)(board, maximizing_player, minimizing_player);
@@ -228,6 +230,11 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
         for dice_roll in 1..=6 {
             let mut alpha = alpha;
             let mut beta = beta;
+
+            let next_probability = match dice_roll {
+                6 => probability / 6.0,
+                _ => probability,
+            };
 
             let score = if current_player == maximizing_player {
                 let mut moves = board.get_moves(dice_roll, maximizing_player, minimizing_player);
@@ -244,7 +251,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                         Some(_) => {
                             panic!("This should never happen: minimizing player won after maximizing player's move")
                         }
-                        _ => (
+                        None => (
                             self.expectiminimax(
                                 &board,
                                 if dice_roll == 6 {
@@ -259,6 +266,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
+                                next_probability,
                             ),
                             false,
                         ),
@@ -297,16 +305,16 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 let mut min_score = f64::INFINITY;
 
                 for mov in &moves {
-                    let new_board = board.with_move(minimizing_player, mov);
+                    let board = board.with_move(minimizing_player, mov);
 
-                    let (score, guaranteed_loss) = match new_board.get_winner() {
+                    let (score, guaranteed_loss) = match board.get_winner() {
                         Some(player) if player == minimizing_player => (-1e10, true),
                         Some(_) => {
                             panic!("This should never happen: maximizing player won after minimizing player's move")
                         }
                         None => (
                             self.expectiminimax(
-                                &new_board,
+                                &board,
                                 if dice_roll == 6 {
                                     minimizing_player
                                 } else {
@@ -319,6 +327,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
+                                next_probability,
                             ),
                             false,
                         ),
@@ -341,10 +350,14 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 min_score
             };
 
-            expected_value += score;
+            expected_value += (if dice_roll == 6 {
+                score
+            } else {
+                next_probability * score
+            }) / 6.0;
         }
 
-        expected_value / 6.0
+        expected_value
     }
 }
 
@@ -386,9 +399,10 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
                     f64::NEG_INFINITY,
                     f64::INFINITY,
                     rng,
-                ) * if mov.eats() { 2.0 } else { 1.0 };
+                    1.0,
+                );
 
-                if VERBOSE_LOGGING {
+                if INFO_LOGGING {
                     println!("Move {:?} scored: {}", mov, score);
                 }
 

@@ -277,6 +277,7 @@ pub fn main() {
     compare_struggle_players(expectiminimax(0), RandomPlayer, 100_000);
     compare_struggle_players(expectiminimax(1), RandomPlayer, 100_000);
     compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
+    compare_struggle_players(expectiminimax(4), RandomPlayer, 10_00);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 
     /*compare_struggle_players(expectiminimax(0), expectiminimax(0), 10_000);
