@@ -237,14 +237,17 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
     ) -> f64 {
         let hash = get_board_hash(board);
 
-        if let Some(value) = self.cache.get(hash) {
+        if let Some(value) = self.cache.get(hash, depth as u32) {
             return value as f64;
         }
 
         self.evaluations += 1;
 
         if depth == max_depth {
-            return (self.heuristic)(board, maximizing_player, minimizing_player);
+            let value = (self.heuristic)(board, maximizing_player, minimizing_player);
+            self.cache
+                .insert_if_better(hash, value as f32, depth as u32);
+            return value;
         }
 
         let mut expected_value = 0.0;
@@ -289,7 +292,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
-                            ) * multiplier,
+                            ),
                             false,
                         ),
                     };
@@ -349,7 +352,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
-                            ) * multiplier,
+                            ),
                             false,
                         ),
                     };
@@ -371,11 +374,12 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 min_score
             };
 
-            expected_value += score;
+            expected_value += score * multiplier;
         }
 
         expected_value /= 6.0;
-        self.cache.insert(hash, expected_value as f32);
+        self.cache
+            .insert_if_better(hash, expected_value as f32, depth as u32);
         expected_value
     }
 }

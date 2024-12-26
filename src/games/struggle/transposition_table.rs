@@ -6,9 +6,15 @@ use super::board::{Board, PiecePosition};
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub struct BoardHash(u64);
 
+#[derive(Debug, Clone, Default)]
+struct TranspositionTableEntry {
+    pub value: f32,
+    pub depth: u32,
+}
+
 #[derive(Default)]
 pub struct TranspositionTable {
-    table: DashMap<BoardHash, f32>,
+    table: DashMap<BoardHash, TranspositionTableEntry>,
 }
 
 impl TranspositionTable {
@@ -18,12 +24,27 @@ impl TranspositionTable {
         }
     }
 
-    pub fn get(&self, board: BoardHash) -> Option<f32> {
-        self.table.get(&board).map(|entry| *entry.value())
+    pub fn get(&self, board: BoardHash, depth: u32) -> Option<f32> {
+        self.table
+            .get(&board)
+            .filter(|entry| {
+                // Only return the value if the depth is greater or equal to the depth of the entry
+                entry.depth >= depth
+            })
+            .map(|entry| entry.value)
     }
 
-    pub fn insert(&self, board: BoardHash, value: f32) {
-        self.table.insert(board, value);
+    pub fn insert_if_better(&self, board: BoardHash, value: f32, depth: u32) {
+        self.table
+            .entry(board)
+            .and_modify(|entry| {
+                // If the new depth is greater than the current depth, update the entry
+                if depth > entry.depth {
+                    entry.value = value;
+                    entry.depth = depth;
+                }
+            })
+            .or_insert_with(|| TranspositionTableEntry { value, depth });
     }
 }
 

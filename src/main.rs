@@ -275,7 +275,7 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(2), RandomPlayer, 100000);
+    compare_struggle_players(expectiminimax(4), RandomPlayer, 100000);
     //compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 
