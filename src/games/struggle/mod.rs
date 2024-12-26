@@ -10,8 +10,9 @@ use self::{
 
 pub mod board;
 pub mod players;
+pub mod transposition_table;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
 pub enum PlayerColor {
     Red = 0,
     Blue,
@@ -181,11 +182,18 @@ impl<A: players::StrugglePlayer, B: players::StrugglePlayer> RaceGame for Strugg
 
             stats.pieces_eaten_by[index] += add_eats;
             stats.turns += 1;
+            stats.turns_per_player[index] += 1;
         }
 
         self.board.perform_move(ctx.current_player, mov);
 
         if let Some(winner) = self.board.get_winner() {
+            if let Some(stats) = &mut self.stats {
+                stats.expectiminimax_evals = [
+                    self.player_a.player.total_evaluations(),
+                    self.player_b.player.total_evaluations(),
+                ];
+            }
             TurnResult::EndGame { winner }
         } else if ctx.dice == 6 {
             TurnResult::PlayAgain

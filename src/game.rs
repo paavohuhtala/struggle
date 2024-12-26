@@ -14,6 +14,8 @@ pub struct GameStats<const MAX_MOVES: usize> {
     pub move_distribution: [[u16; MAX_MOVES]; 2],
     pub pieces_eaten_by: [u16; 2],
     pub turns: u16,
+    pub turns_per_player: [u16; 2],
+    pub expectiminimax_evals: [u64; 2],
 }
 
 impl<const MAX_MOVES: usize> GameStats<MAX_MOVES> {
@@ -22,6 +24,8 @@ impl<const MAX_MOVES: usize> GameStats<MAX_MOVES> {
             move_distribution: [[0; MAX_MOVES]; 2],
             pieces_eaten_by: [0; 2],
             turns: 0,
+            turns_per_player: [0; 2],
+            expectiminimax_evals: [0; 2],
         }
     }
 }

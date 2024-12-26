@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, hash::Hash};
 
 use arrayvec::ArrayVec;
 
@@ -6,7 +6,7 @@ use super::{PlayerColor, COLORS};
 
 pub type BoardCell = Option<PlayerColor>;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum PiecePosition {
     Board(u8),
     Goal(u8),
@@ -21,14 +21,21 @@ impl PiecePosition {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Board {
     pub tiles: [BoardCell; 7 * 4],
     pub goals: [Goal; 4],
     pub home_bases: [HomeBase; 4],
 
-    players: (PlayerColor, PlayerColor),
-    piece_cache: (PieceVec, PieceVec),
+    pub players: (PlayerColor, PlayerColor),
+    pub piece_cache: (PieceVec, PieceVec),
+}
+
+impl Hash for Board {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.home_bases.hash(state);
+        self.piece_cache.hash(state);
+    }
 }
 
 pub type MoveVec = ArrayVec<StruggleMove, 4>;
@@ -114,6 +121,9 @@ impl Board {
                 enemy_positions.push(PiecePosition::Goal(i as u8))
             }
         }
+
+        player_positions.sort();
+        enemy_positions.sort();
 
         (player_positions, enemy_positions)
     }
@@ -302,7 +312,7 @@ impl Board {
     }
 }
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, Hash, PartialEq, Eq)]
 pub struct HomeBase {
     pub pieces_waiting: u8,
 }

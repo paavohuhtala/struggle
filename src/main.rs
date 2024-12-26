@@ -197,6 +197,16 @@ pub fn compare_players_detailed<
         b.1.name(),
         choice_percentage_b
     );
+
+    let evals_per_turn: f64 = stats
+        .iter()
+        .map(|s| s.expectiminimax_evals[0] as f64 / s.turns_per_player[0] as f64)
+        .sum();
+
+    println!(
+        "A's average expectiminimax evaluations per turn: {:.1}",
+        evals_per_turn / total_games as f64
+    );
 }
 
 fn draw_move_distribution_histogram<const MAX_MOVES: usize>(
@@ -265,7 +275,7 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(1), expectiminimax(2), 100000);
+    compare_struggle_players(expectiminimax(2), RandomPlayer, 100000);
     //compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 

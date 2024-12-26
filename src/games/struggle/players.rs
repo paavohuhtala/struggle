@@ -1,4 +1,4 @@
-use std::borrow::Cow;
+use std::{borrow::Cow, sync::Arc};
 
 use ::rand::{prelude::*, rngs::SmallRng};
 use itertools::Itertools;
@@ -8,6 +8,7 @@ use crate::game::NamedPlayer;
 
 use super::{
     board::{Board, PiecePosition, StruggleMove},
+    transposition_table::{get_board_hash, TranspositionTable},
     PlayerColor,
 };
 
@@ -19,6 +20,12 @@ pub trait StrugglePlayer: Clone + Send + Sync + NamedPlayer {
         moves: &'a [StruggleMove],
         rng: &mut SmallRng,
     ) -> &'a StruggleMove;
+
+    fn reset(&mut self) {}
+
+    fn total_evaluations(&self) -> u64 {
+        0
+    }
 }
 
 pub struct GameContext {
@@ -192,6 +199,10 @@ where
     pub max_depth: u8,
 
     name: &'static str,
+
+    pub evaluations: u64,
+
+    cache: Arc<TranspositionTable>,
 }
 
 const INFO_LOGGING: bool = false;
@@ -205,11 +216,13 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
             heuristic: f,
             max_depth,
             name,
+            evaluations: 0,
+            cache: Default::default(),
         }
     }
 
     fn expectiminimax(
-        &self,
+        &mut self,
         board: &Board,
         current_player: PlayerColor,
         maximizing_player: PlayerColor,
@@ -221,8 +234,15 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
         // Beta: maximum guaranteed score for the minimizing player
         beta: f64,
         rng: &mut SmallRng,
-        probability: f64,
     ) -> f64 {
+        let hash = get_board_hash(board);
+
+        if let Some(value) = self.cache.get(hash) {
+            return value as f64;
+        }
+
+        self.evaluations += 1;
+
         if depth == max_depth {
             return (self.heuristic)(board, maximizing_player, minimizing_player);
         }
@@ -233,13 +253,14 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
             let mut alpha = alpha;
             let mut beta = beta;
 
-            let next_probability = match dice_roll {
-                6 => probability / 6.0,
-                _ => probability,
+            let multiplier = match dice_roll {
+                6 => 1.0 / 6.0,
+                _ => 1.0,
             };
 
             let score = if current_player == maximizing_player {
-                let mut moves = board.get_moves(dice_roll, maximizing_player, minimizing_player);
+                let mut moves: arrayvec::ArrayVec<StruggleMove, 4> =
+                    board.get_moves(dice_roll, maximizing_player, minimizing_player);
                 moves.sort_by_key(|mov| OrderedFloat(-score_move(rng, mov)));
 
                 let mut max_score = f64::NEG_INFINITY;
@@ -268,8 +289,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
-                                next_probability,
-                            ),
+                            ) * multiplier,
                             false,
                         ),
                     };
@@ -329,8 +349,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                                 alpha,
                                 beta,
                                 rng,
-                                next_probability,
-                            ),
+                            ) * multiplier,
                             false,
                         ),
                     };
@@ -352,13 +371,11 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
                 min_score
             };
 
-            expected_value += (if dice_roll == 6 {
-                score
-            } else {
-                next_probability * score
-            }) / 6.0;
+            expected_value += score;
         }
 
+        expected_value /= 6.0;
+        self.cache.insert(hash, expected_value as f32);
         expected_value
     }
 }
@@ -401,7 +418,6 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
                     f64::NEG_INFINITY,
                     f64::INFINITY,
                     rng,
-                    1.0,
                 );
 
                 if INFO_LOGGING {
@@ -412,6 +428,14 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64 + Clone + Send + Sync> Strug
                 OrderedFloat(score + rng.gen::<f64>())
             })
             .unwrap()
+    }
+
+    fn reset(&mut self) {
+        self.evaluations = 0;
+    }
+
+    fn total_evaluations(&self) -> u64 {
+        self.evaluations
     }
 }
 
@@ -520,6 +544,8 @@ pub fn expectiminimax(depth: u8) -> impl StrugglePlayer {
         heuristic: default_heuristic,
         max_depth: depth,
         name: "Expectiminimax",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -528,6 +554,8 @@ pub fn worst_expectiminimax(depth: u8) -> impl StrugglePlayer {
         heuristic: |b, p1, p2| -default_heuristic(b, p1, p2),
         max_depth: depth,
         name: "WorstExpectiminimax",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -536,6 +564,8 @@ pub fn participation_award(depth: u8) -> impl StrugglePlayer {
         heuristic: |board, player, _| -(board.home_bases[player as usize].pieces_waiting as f64),
         max_depth: depth,
         name: "ParticipationAward",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -544,6 +574,8 @@ pub fn one_at_a_time(depth: u8) -> impl StrugglePlayer {
         heuristic: |board, player, _| board.home_bases[player as usize].pieces_waiting as f64,
         max_depth: depth,
         name: "OneAtATime",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -598,6 +630,8 @@ pub fn one_at_a_time_deluxe(max_depth: u8) -> impl StrugglePlayer {
         heuristic: one_at_a_time_heuristic,
         max_depth,
         name: "OneAtATimeDeluxe",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -613,6 +647,8 @@ pub fn maximize_options(depth: u8) -> impl StrugglePlayer {
         heuristic: count_moves_heuristic,
         max_depth: depth,
         name: "MaximizeOptions",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -621,6 +657,8 @@ pub fn minimize_options(max_depth: u8) -> impl StrugglePlayer {
         heuristic: |board, player, enemy| -count_moves_heuristic(board, enemy, player),
         max_depth,
         name: "MinimizeOptions",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -660,6 +698,8 @@ pub fn maximize_length_expectiminimax(max_depth: u8) -> impl StrugglePlayer {
         heuristic: |board, _player, _enemy| maximize_length_heuristic(board),
         max_depth,
         name: "MaximizeLength",
+        evaluations: 0,
+        cache: Default::default(),
     }
 }
 
@@ -708,6 +748,8 @@ impl StrugglePlayer for StatefulGetItOverWith {
                         default_heuristic(board, enemy, player)
                     }
                 },
+                evaluations: 0,
+                cache: Default::default(),
             }
             .select_move(&ctx, board, moves, rng)
         } else {
