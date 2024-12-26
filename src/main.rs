@@ -6,7 +6,9 @@ use struggle_core::{
     game::{play_game, CreateGame, IntoGameStats, NamedPlayer},
     games::{
         struggle::{
-            players::{expectiminimax, RandomPlayer, StrugglePlayer, WorstScoreMovePlayer},
+            players::{
+                expectiminimax, RandomPlayer, ScoreMovePlayer, StrugglePlayer, WorstScoreMovePlayer,
+            },
             PlayerColor, StruggleGame,
         },
         twist::{players::TwistPlayer, TwistGame},
@@ -275,7 +277,7 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(4), RandomPlayer, 100000);
+    compare_struggle_players(expectiminimax(2), RandomPlayer, 10000);
     //compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 

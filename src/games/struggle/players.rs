@@ -207,6 +207,8 @@ where
 
 const INFO_LOGGING: bool = false;
 const VERBOSE_LOGGING: bool = false;
+const USE_TRANSPOSITION_TABLE: bool = true;
+const USE_TRANSPOSITION_TABLE_FOR_NON_LEAFS: bool = false;
 
 const WIN_SCORE: f64 = 1e10;
 
@@ -235,18 +237,23 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
         beta: f64,
         rng: &mut SmallRng,
     ) -> f64 {
-        let hash = get_board_hash(board);
+        let hash = get_board_hash(board, current_player);
 
-        if let Some(value) = self.cache.get(hash, depth as u32) {
-            return value as f64;
+        if USE_TRANSPOSITION_TABLE {
+            if let Some(value) = self.cache.get(hash, depth) {
+                return value as f64;
+            }
         }
 
         self.evaluations += 1;
 
         if depth == max_depth {
             let value = (self.heuristic)(board, maximizing_player, minimizing_player);
-            self.cache
-                .insert_if_better(hash, value as f32, depth as u32);
+
+            if USE_TRANSPOSITION_TABLE {
+                self.cache.insert_if_better(hash, value as f32, depth);
+            }
+
             return value;
         }
 
@@ -378,8 +385,12 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
         }
 
         expected_value /= 6.0;
-        self.cache
-            .insert_if_better(hash, expected_value as f32, depth as u32);
+
+        if USE_TRANSPOSITION_TABLE_FOR_NON_LEAFS {
+            self.cache
+                .insert_if_better(hash, expected_value as f32, depth);
+        }
+
         expected_value
     }
 }

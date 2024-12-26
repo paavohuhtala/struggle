@@ -1,6 +1,10 @@
 use dashmap::DashMap;
+use rustc_hash::FxBuildHasher;
 
-use super::board::{Board, PiecePosition};
+use super::{
+    board::{Board, PiecePosition},
+    PlayerColor,
+};
 
 #[repr(transparent)]
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
@@ -9,24 +13,24 @@ pub struct BoardHash(u64);
 #[derive(Debug, Clone, Default)]
 struct TranspositionTableEntry {
     pub value: f32,
-    pub depth: u32,
+    pub depth: u8,
 }
 
 #[derive(Default)]
 pub struct TranspositionTable {
-    table: DashMap<BoardHash, TranspositionTableEntry>,
+    table: DashMap<BoardHash, TranspositionTableEntry, FxBuildHasher>,
 }
 
 impl TranspositionTable {
     pub fn new() -> Self {
         Self {
-            table: DashMap::new(),
+            table: DashMap::default(),
         }
     }
 
-    pub fn get(&self, board: BoardHash, depth: u32) -> Option<f32> {
+    pub fn get(&self, board_hash: BoardHash, depth: u8) -> Option<f32> {
         self.table
-            .get(&board)
+            .get(&board_hash)
             .filter(|entry| {
                 // Only return the value if the depth is greater or equal to the depth of the entry
                 entry.depth >= depth
@@ -34,9 +38,9 @@ impl TranspositionTable {
             .map(|entry| entry.value)
     }
 
-    pub fn insert_if_better(&self, board: BoardHash, value: f32, depth: u32) {
+    pub fn insert_if_better(&self, board_hash: BoardHash, value: f32, depth: u8) {
         self.table
-            .entry(board)
+            .entry(board_hash)
             .and_modify(|entry| {
                 // If the new depth is greater than the current depth, update the entry
                 if depth > entry.depth {
@@ -68,9 +72,12 @@ impl TranspositionTable {
 // bits 37-41: player 1 piece 2 location
 // bits 42-42: player 1 piece 3 on board
 // bits 43-47: player 1 piece 3 location
-// bits 48-63: unused
+// bits 48-48: current player (0 or 1)
+// bits 49-63: unused
 
-pub fn get_board_hash(board: &Board) -> BoardHash {
+const STORE_CURRENT_PLAYER_IN_KEY: bool = false;
+
+pub fn get_board_hash(board: &Board, current_player: PlayerColor) -> BoardHash {
     let mut packed = 0u64;
 
     const PLAYER_0_OFFSET: u64 = 0;
@@ -111,6 +118,16 @@ pub fn get_board_hash(board: &Board) -> BoardHash {
     }
 
     // We don't need to store how many pieces are waiting, because it's implied by the board state
+
+    if STORE_CURRENT_PLAYER_IN_KEY {
+        let current_player_bit = if current_player == board.players.0 {
+            0
+        } else {
+            1
+        };
+
+        packed |= current_player_bit << 48;
+    }
 
     BoardHash(packed)
 }
