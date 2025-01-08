@@ -207,7 +207,7 @@ where
 
 const INFO_LOGGING: bool = false;
 const VERBOSE_LOGGING: bool = false;
-const USE_TRANSPOSITION_TABLE: bool = true;
+const USE_TRANSPOSITION_TABLE: bool = false;
 const USE_TRANSPOSITION_TABLE_FOR_NON_LEAFS: bool = false;
 
 const WIN_SCORE: f64 = 1e10;
@@ -386,7 +386,7 @@ impl<F: Fn(&Board, PlayerColor, PlayerColor) -> f64> GameTreePlayer<F> {
 
         expected_value /= 6.0;
 
-        if USE_TRANSPOSITION_TABLE_FOR_NON_LEAFS {
+        if USE_TRANSPOSITION_TABLE && USE_TRANSPOSITION_TABLE_FOR_NON_LEAFS {
             self.cache
                 .insert_if_better(hash, expected_value as f32, depth);
         }
@@ -554,11 +554,61 @@ pub fn default_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor)
     my_score - enemy_score
 }
 
+pub fn minimal_heuristic(board: &Board, player: PlayerColor, enemy: PlayerColor) -> f64 {
+    match board.get_winner() {
+        Some(winner) if winner == player => {
+            return WIN_SCORE;
+        }
+        Some(_) => {
+            return -WIN_SCORE;
+        }
+        None => {}
+    }
+
+    let mut score = 0.0;
+
+    let (my_pieces, enemy_pieces) = board.get_pieces(player, enemy);
+
+    for piece in my_pieces {
+        match piece {
+            PiecePosition::Board(_) => {
+                score += 1.0;
+            }
+            PiecePosition::Goal(_) => {
+                score += 10.0;
+            }
+        }
+    }
+
+    for piece in enemy_pieces {
+        match piece {
+            PiecePosition::Board(_) => {
+                score -= 10.0;
+            }
+            PiecePosition::Goal(_) => {
+                score -= 100.0;
+            }
+        }
+    }
+
+    score
+}
+
 pub fn expectiminimax(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: default_heuristic,
         max_depth: depth,
         name: "Expectiminimax",
+        evaluations: 0,
+        cache: Default::default(),
+    }
+}
+
+pub fn expectiminimax_mvp(depth: u8) -> impl StrugglePlayer {
+    GameTreePlayer {
+        heuristic: minimal_heuristic,
+        max_depth: depth,
+        name: "ExpectiminimaxBasic",
         evaluations: 0,
         cache: Default::default(),
     }
@@ -574,11 +624,11 @@ pub fn worst_expectiminimax(depth: u8) -> impl StrugglePlayer {
     }
 }
 
-pub fn participation_award(depth: u8) -> impl StrugglePlayer {
+pub fn participation_trophy(depth: u8) -> impl StrugglePlayer {
     GameTreePlayer {
         heuristic: |board, player, _| -(board.home_bases[player as usize].pieces_waiting as f64),
         max_depth: depth,
-        name: "ParticipationAward",
+        name: "ParticipationTrophy",
         evaluations: 0,
         cache: Default::default(),
     }

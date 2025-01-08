@@ -5,7 +5,7 @@ use struggle_core::{
     game::{play_game, NamedPlayer},
     games::struggle::{
         players::{
-            expectiminimax, maximize_options, minimize_options, participation_award,
+            expectiminimax, maximize_options, minimize_options, participation_trophy,
             worst_expectiminimax, DilutedPlayer, RandomDietPlayer, RandomEaterPlayer, RandomPlayer,
             StrugglePlayer,
         },
@@ -77,7 +77,7 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
@@ -93,7 +93,7 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
@@ -108,7 +108,7 @@ pub fn main() {
             RandomDietPlayer,
             expectiminimax(1),
             worst_expectiminimax(1),
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
@@ -122,7 +122,7 @@ pub fn main() {
         [
             expectiminimax(1),
             worst_expectiminimax(1),
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
@@ -135,7 +135,7 @@ pub fn main() {
         worst_expectiminimax(1),
         [
             worst_expectiminimax(1),
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),
@@ -145,9 +145,9 @@ pub fn main() {
     );
 
     run_games!(
-        participation_award(1),
+        participation_trophy(1),
         [
-            participation_award(1),
+            participation_trophy(1),
             maximize_options(1),
             minimize_options(1),
             DilutedPlayer(expectiminimax(1), 0.5),

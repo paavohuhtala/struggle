@@ -7,7 +7,9 @@ use struggle_core::{
     games::{
         struggle::{
             players::{
-                expectiminimax, RandomPlayer, ScoreMovePlayer, StrugglePlayer, WorstScoreMovePlayer,
+                expectiminimax, expectiminimax_mvp, maximize_length_expectiminimax,
+                worst_expectiminimax, RandomPlayer, ScoreMovePlayer, StrugglePlayer,
+                WorstScoreMovePlayer,
             },
             PlayerColor, StruggleGame,
         },
@@ -194,10 +196,20 @@ pub fn compare_players_detailed<
         choice_percentage_a
     );
 
+    let four_choices_percentage_a = (move_distribution[0][3] as f64
+        / move_distribution[0].iter().map(|&i| i as f64).sum::<f64>())
+        * 100.0;
+
     println!(
         "{}: {:.1}% of turns had more than 1 option",
         b.1.name(),
         choice_percentage_b
+    );
+
+    println!(
+        "{}: {:.1}% of turns had 4 options",
+        a.1.name(),
+        four_choices_percentage_a
     );
 
     let evals_per_turn: f64 = stats
@@ -229,13 +241,18 @@ fn draw_move_distribution_histogram<const MAX_MOVES: usize>(
             ("Source Sans Pro, sans-serif", 20),
         )
         .build_cartesian_2d(
-            (0..MAX_MOVES).into_segmented(),
+            (0..MAX_MOVES - 1).into_segmented(),
             0..((most_common_number_of_moves as f32 * 1.05) as u32),
         )
         .unwrap();
 
     chart
         .configure_mesh()
+        .x_label_formatter(&|coord| match coord {
+            SegmentValue::Exact(_) => todo!(),
+            SegmentValue::CenterOf(n) => format!("{}", n + 1),
+            SegmentValue::Last => todo!(),
+        })
         .y_label_formatter(&|coord| format!("{:.1}%", (*coord as f32 / total_moves as f32) * 100.0))
         .draw()
         .unwrap();
@@ -277,7 +294,15 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(2), RandomPlayer, 10000);
+    compare_struggle_players(expectiminimax(2), RandomPlayer, 1_000_00);
+
+    /*compare_struggle_players(expectiminimax_mvp(0), RandomPlayer, 100_0000);
+    compare_struggle_players(expectiminimax_mvp(0), ScoreMovePlayer, 100_0000);
+    //compare_struggle_players(expectiminimax_mvp(1), RandomPlayer, 100_000);
+    compare_struggle_players(expectiminimax_mvp(2), RandomPlayer, 100_000);
+    //compare_struggle_players(expectiminimax_mvp(3), RandomPlayer, 100_00);
+    //compare_struggle_players(expectiminimax_mvp(4), RandomPlayer, 100_00);
+    compare_struggle_players(expectiminimax_mvp(2), ScoreMovePlayer, 500_000);*/
     //compare_struggle_players(expectiminimax(2), RandomPlayer, 100_000);
     //compare_struggle_players(expectiminimax(3), RandomPlayer, 10_000);
 
