@@ -46,7 +46,7 @@ pub fn compare_players_detailed<
 
     let results = (0..rounds)
         .into_par_iter()
-        .with_min_len(1000)
+        .with_min_len(128)
         .progress_count(rounds as u64)
         .map(|_| {
             let mut game = G::create_game(a.clone(), b.clone(), true);
@@ -83,7 +83,9 @@ pub fn compare_players_detailed<
     let total_eats = stats
         .iter()
         .map(|s| s.pieces_eaten_by)
-        .fold([0, 0], |acc, eats| [acc[0] + eats[0], acc[1] + eats[1]]);
+        .fold([0u64, 0u64], |acc, eats| {
+            [acc[0] + eats[0] as u64, acc[1] + eats[1] as u64]
+        });
 
     let average_eats_per_player = [
         total_eats[0] as f64 / total_games as f64,
@@ -294,7 +296,7 @@ fn compare_twist_players(a: impl TwistPlayer, b: impl TwistPlayer, rounds: u32, 
 pub fn main() {
     std::fs::create_dir_all("out").unwrap();
 
-    compare_struggle_players(expectiminimax(2), RandomPlayer, 1_000_00);
+    compare_struggle_players(expectiminimax(1), RandomPlayer, 1_00000);
 
     /*compare_struggle_players(expectiminimax_mvp(0), RandomPlayer, 100_0000);
     compare_struggle_players(expectiminimax_mvp(0), ScoreMovePlayer, 100_0000);
